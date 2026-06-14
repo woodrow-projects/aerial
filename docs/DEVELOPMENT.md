@@ -55,7 +55,8 @@ pnpm --filter @aerial/web dev                # :5173  (proxies /api → :3000)
 
 1. Create a channel in the SPA; copy its **DJ ingest** host/port/mount and create a **stream key**.
 2. In BUTT/Mixxx: server = ingest host, port = ingest port, mount = `/<slug>`,
-   user = `source`, password = the stream key, format = MP3/OGG. Connect.
+   user = `source`, password = the stream key, format = MP3/OGG, **TLS/SSL = on**
+   (ingest is TLS-terminated at Caddy — D10). Connect.
 3. The channel badge flips to **● LIVE**; the fallback loop crossfades to your input.
 4. Play the **HLS** URL (`/hls/<slug>/live.m3u8`) in Safari/Chrome and the **Icecast**
    URL in VLC. Fetch **`/hls/<slug>/nowplaying.json`** and watch it update.
@@ -70,6 +71,11 @@ Icecast 2.4) via `docker compose up`:
 - **DJ ingest** (Icecast source protocol) → bcrypt **stream-key auth** gates it →
   `fallback()` **crossfades** loop→live (`live:true`); disconnect crossfades back
   (`live:false`). A wrong key is rejected (TCP dropped).
+- **DJ-ingest TLS** (D10): Caddy (custom image with the `caddy-l4` plugin) terminates
+  TLS on the ingest ports (8100–8110) reusing its managed cert, and proxies the
+  decrypted source to the internal harbor. Verified: a TLS source authenticates and
+  goes live; a **plaintext** source to the public port is dropped; harbor ports are
+  no longer publicly reachable.
 - `nowplaying.json` is written + served cacheable; the SPA and `/api/docs` are served via Caddy.
 
 Fixes made during validation (now in the code): Liquidsoap `auth` takes a record;
@@ -81,8 +87,12 @@ base `liquidsoap` entrypoint reset.
 
 ## Remaining caveats (before production)
 
-- **DJ-ingest TLS**: harbor ports are exposed as plain TCP. Putting the Icecast *source*
-  protocol behind TLS is a hardening follow-up (D10).
+- **Ingest source IP**: because Caddy terminates ingest TLS at layer 4, the harbor sees
+  Caddy's IP, not the DJ's, so `StreamSession.sourceIp` logs Caddy. Preserving the real
+  IP needs PROXY-protocol support on both ends (caddy-l4 `proxy_protocol` + a harbor that
+  parses it) — a later enhancement.
+- **Local-dev ingest TLS** needs a cert: run with `SITE_ADDRESS=localhost` (Caddy internal
+  CA) or a real domain. With `SITE_ADDRESS=:80` the panel works but ingest TLS won't.
 - Schema is applied with `prisma db push` (no migration history yet); switch to
   `migrate deploy` once you cut the first migration.
 - Liquidsoap runs as **root** inside the container (`allow_root`); fine in a container,

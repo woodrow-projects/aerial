@@ -181,7 +181,8 @@ minimal embeddable player is deferred.
   user-chosen, never plaintext.
 - All secrets live in **git-ignored env**, never in repo config XML.
 - **TLS mandatory** (Caddy + automatic Let's Encrypt) on the listener and control-plane endpoints; raw
-  Icecast/source ports sit behind the TLS terminator.
+  Icecast/source ports sit behind the TLS terminator. *Implemented:* DJ ingest is TLS-terminated by Caddy via
+  the `caddy-l4` layer4 plugin (the harbor ports are internal-only); see `ARCHITECTURE.md`.
 - Add an **operator account** model (`users`) for the control panel (the original spec had no human/owner
   concept).
 - Per-channel **kill switch** (`is_active`), per-stream logging (mount/time/source IP), an abuse contact,

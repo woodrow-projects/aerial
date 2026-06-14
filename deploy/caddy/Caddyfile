@@ -1,9 +1,84 @@
-# Aerial edge — auto-TLS, HLS static origin, Icecast proxy, API/SPA proxy.
-# SITE_ADDRESS=radio.example.com  → automatic Let's Encrypt HTTPS.
-# SITE_ADDRESS=:80                → plain HTTP for local/dev (no TLS).
-
+# Aerial edge — auto-TLS, HLS static origin, Icecast proxy, API/SPA proxy, and
+# TLS-terminated DJ ingest (ADR D10/D11).
+#
+# SITE_ADDRESS=radio.example.com  → automatic Let's Encrypt HTTPS + ingest cert.
+# SITE_ADDRESS=localhost          → Caddy internal CA (local dev; clients skip-verify).
 {
 	email {$ACME_EMAIL}
+
+	# ── DJ ingest: terminate TLS for the Icecast source protocol, then proxy the
+	# decrypted stream to the per-channel Liquidsoap harbor on the same port. The
+	# harbors are internal-only; only Caddy is published. The `tls` handler reuses
+	# the certs Caddy manages for {$SITE_ADDRESS} (matched by SNI). Static range
+	# 8100–8110 maps to channel harbor ports (HARBOR_BASE_PORT + index).
+	layer4 {
+		:8100 {
+			route {
+				tls
+				proxy control-plane:8100
+			}
+		}
+		:8101 {
+			route {
+				tls
+				proxy control-plane:8101
+			}
+		}
+		:8102 {
+			route {
+				tls
+				proxy control-plane:8102
+			}
+		}
+		:8103 {
+			route {
+				tls
+				proxy control-plane:8103
+			}
+		}
+		:8104 {
+			route {
+				tls
+				proxy control-plane:8104
+			}
+		}
+		:8105 {
+			route {
+				tls
+				proxy control-plane:8105
+			}
+		}
+		:8106 {
+			route {
+				tls
+				proxy control-plane:8106
+			}
+		}
+		:8107 {
+			route {
+				tls
+				proxy control-plane:8107
+			}
+		}
+		:8108 {
+			route {
+				tls
+				proxy control-plane:8108
+			}
+		}
+		:8109 {
+			route {
+				tls
+				proxy control-plane:8109
+			}
+		}
+		:8110 {
+			route {
+				tls
+				proxy control-plane:8110
+			}
+		}
+	}
 }
 
 {$SITE_ADDRESS} {
@@ -12,7 +87,6 @@
 		root * /srv/hls
 		file_server
 
-		# Playlists must not be cached long; segments are immutable.
 		@m3u8 path *.m3u8
 		header @m3u8 Cache-Control "no-cache"
 
@@ -22,7 +96,6 @@
 		@segments path *.ts *.m4s *.mp4
 		header @segments Cache-Control "public, max-age=31536000, immutable"
 
-		# Allow embedding from operators' own sites (ADR D9).
 		header Access-Control-Allow-Origin "*"
 	}
 

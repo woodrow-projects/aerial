@@ -114,6 +114,7 @@ export class ChannelsService {
         mount: channel.mount,
         username: "source",
         protocol: "icecast",
+        tls: true, // Caddy terminates ingest TLS (D10)
       },
     };
   }

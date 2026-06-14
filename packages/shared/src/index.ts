@@ -49,6 +49,7 @@ export interface ChannelEndpoints {
     mount: string; // /<slug>
     username: "source";
     protocol: "icecast";
+    tls: boolean; // TLS terminated at Caddy (ADR D10) — DJ client must enable TLS
   };
 }
 

@@ -57,15 +57,14 @@ services:
       - media:/srv/media
     expose:
       - "3000"
-    # DJ ingest (Liquidsoap harbor) ports — one per channel from HARBOR_BASE_PORT.
-    # Published so broadcasting software can connect. Widen the range as needed.
-    ports:
-      - "8100-8110:8100-8110"
+    # Liquidsoap harbor ports (8100+) are internal-only: Caddy terminates ingest
+    # TLS and proxies to them over the compose network (D10). Not published.
 
   caddy:
     # Public entrypoint: auto-TLS, serves HLS segments (CDN origin), proxies
-    # Icecast and the control plane (ADR D11).
-    image: caddy:2-alpine
+    # Icecast + the control plane, and TLS-terminates DJ ingest via layer4 (D10/D11).
+    build:
+      context: ./caddy
     restart: unless-stopped
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
@@ -73,6 +72,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      # DJ ingest (TLS-terminated here, proxied to the internal harbors)
+      - "8100-8110:8100-8110"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - hls:/srv/hls:ro

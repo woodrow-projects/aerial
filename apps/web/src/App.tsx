@@ -135,7 +135,7 @@ function ChannelCard({
         <Endpoint label="Now playing" value={channel.endpoints.nowPlaying} />
         <Endpoint
           label="DJ ingest"
-          value={`${channel.endpoints.ingest.host}:${channel.endpoints.ingest.port}${channel.endpoints.ingest.mount}  (user: source)`}
+          value={`${channel.endpoints.ingest.host}:${channel.endpoints.ingest.port}${channel.endpoints.ingest.mount}  (user: source${channel.endpoints.ingest.tls ? ", TLS" : ""})`}
         />
       </div>
 

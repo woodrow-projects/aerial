@@ -63,7 +63,7 @@ graph TD
 
 | Component | Role |
 |-----------|------|
-| **Caddy** | Single public entrypoint. Automatic Let's Encrypt TLS; reverse-proxies the control plane; serves the HLS segment directory as the CDN origin; proxies the Icecast mounts. |
+| **Caddy** | Single public entrypoint (custom image with the `caddy-l4` plugin). Automatic Let's Encrypt TLS; reverse-proxies the control plane; serves the HLS segment directory as the CDN origin; proxies the Icecast mounts; and **terminates DJ-ingest TLS at layer 4** (ports 8100–8110), proxying the decrypted source to the internal harbor. |
 | **control-plane (NestJS/Fastify)** | The brain. Channel CRUD, operator auth, stream-key issuance/verification, per-channel Liquidsoap **config-gen + spawn/supervise**, the now-playing pump, CDN auto-provisioning (fast-follow), analytics + cost projection. Serves the built SPA. Exposes an OpenAPI-documented public API. |
 | **Engine Supervisor** | A control-plane module that generates each channel's `.liq` config and manages one Liquidsoap **child process per channel** with lifecycle hooks (start on boot, graceful drain on shutdown, restart on crash). |
 | **Liquidsoap (×N channels)** | Per channel: a `fallback([live, loop])` pipeline (instant cutover via `track_sensitive=false`, `mksafe` loop) emitting **two outputs** — an HLS rendition set + one Icecast mount. |
@@ -88,10 +88,12 @@ graph TD
 
 ## Key flows
 
-**Ingest + auth.** DJ points BUTT/Mixxx at the channel's TLS ingest URL with `source` + the channel stream
-key → Caddy → Liquidsoap harbor → harbor `auth` hook calls the control plane `POST /internal/auth` →
-bcrypt + constant-time compare against the active hashed key → accept (200) or drop (401). On accept,
-`fallback` crossfades from the loop to the live source; on disconnect it rolls back to the loop.
+**Ingest + auth.** DJ points BUTT/Mixxx at the channel's TLS ingest URL (`host:8100+index`, TLS on) with
+`source` + the channel stream key → **Caddy terminates the TLS at layer 4** and proxies the decrypted
+Icecast source to the channel's internal Liquidsoap harbor → harbor `auth` hook calls the control plane
+`POST /internal/auth` → bcrypt + constant-time compare against the active hashed key → accept (200) or drop
+(401). On accept, `fallback` crossfades from the loop to the live source; on disconnect it rolls back to the
+loop. (A plaintext connection to the public ingest port is dropped by Caddy.)
 
 **Delivery.** Liquidsoap writes HLS segments to the shared volume (served by Caddy → optionally pulled by the
 CDN) and pushes one Icecast mount (served origin-direct). Operators consume the `.m3u8`, the Icecast URL, and

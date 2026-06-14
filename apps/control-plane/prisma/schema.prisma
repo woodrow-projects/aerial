@@ -1,0 +1,62 @@
+// Aerial control-plane data model (ADR D10/D11).
+// Single-operator, multi-channel. Stream keys are stored hashed only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Operator accounts for the control panel.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+/// A broadcastable channel. slug doubles as the HLS path prefix and Icecast mount.
+model Channel {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  mount          String   @unique // "/<slug>"
+  isActive       Boolean  @default(true)
+  harborPort     Int      @unique // DJ ingest port (HARBOR_BASE_PORT + index)
+  hlsBitrates    Int[]    @default([64, 128]) // kbps, HE-AAC + AAC-LC
+  icecastBitrate Int      @default(128) // kbps MP3
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  streamKeys StreamKey[]
+  sessions   StreamSession[]
+}
+
+/// Per-channel ingest credentials. Only the bcrypt hash is stored (D10).
+model StreamKey {
+  id         String    @id @default(uuid())
+  channelId  String
+  channel    Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  keyHash    String
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([channelId])
+}
+
+/// Per-stream log for abuse/DMCA response and analytics (D10).
+model StreamSession {
+  id        String    @id @default(uuid())
+  channelId String
+  channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  mount     String
+  sourceIp  String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([channelId])
+}

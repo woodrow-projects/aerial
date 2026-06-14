@@ -1,0 +1,33 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+build/
+*.tsbuildinfo
+
+# turbo
+.turbo/
+
+# env / secrets — NEVER commit (see ADR D10)
+.env
+.env.*
+!.env.example
+
+# prisma
+apps/control-plane/prisma/*.db
+
+# runtime data (audio segments, media, logs)
+/srv/
+hls/
+media/
+*.log
+
+# editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# vite
+apps/web/dist/

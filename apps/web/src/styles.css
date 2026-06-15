@@ -209,4 +209,23 @@ button.danger {
   margin-top: 14px;
   border-top: 1px solid var(--line);
   padding-top: 14px;
+  align-items: center;
+}
+
+.delivery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  margin-right: auto;
+}
+
+.delivery select {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 13px;
 }

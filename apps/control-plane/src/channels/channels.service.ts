@@ -34,6 +34,7 @@ export class ChannelsService {
           slug: input.slug,
           mount: `/${input.slug}`,
           harborPort,
+          deliveryMode: input.deliveryMode,
           hlsBitrates: input.hlsBitrates ?? [64, 128],
           icecastBitrate: input.icecastBitrate ?? 128,
         },
@@ -57,6 +58,7 @@ export class ChannelsService {
       data: {
         name: input.name ?? undefined,
         isActive: input.isActive ?? undefined,
+        deliveryMode: input.deliveryMode ?? undefined,
         hlsBitrates: input.hlsBitrates ?? undefined,
         icecastBitrate: input.icecastBitrate ?? undefined,
       },
@@ -85,6 +87,7 @@ export class ChannelsService {
       name: channel.name,
       slug: channel.slug,
       isActive: channel.isActive,
+      deliveryMode: channel.deliveryMode,
       hlsBitrates: channel.hlsBitrates,
       icecastBitrate: channel.icecastBitrate,
       mount: channel.mount,
@@ -104,9 +107,11 @@ export class ChannelsService {
     } catch {
       ingestHost = "localhost";
     }
+    const emitHls = channel.deliveryMode === "hls" || channel.deliveryMode === "both";
+    const emitIcecast = channel.deliveryMode === "icecast" || channel.deliveryMode === "both";
     return {
-      hls: `${base}/hls/${channel.slug}/live.m3u8`,
-      icecast: `${base}/icecast/${channel.slug}`,
+      hls: emitHls ? `${base}/hls/${channel.slug}/live.m3u8` : null,
+      icecast: emitIcecast ? `${base}/icecast/${channel.slug}` : null,
       nowPlaying: `${base}/hls/${channel.slug}/nowplaying.json`,
       ingest: {
         host: ingestHost,

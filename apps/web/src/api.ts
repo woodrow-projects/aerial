@@ -1,6 +1,7 @@
 import type {
   ChannelDto,
   CreateChannelInput,
+  DeliveryMode,
   StreamKeyCreatedDto,
   StreamKeyDto,
 } from "@aerial/shared";
@@ -32,6 +33,13 @@ export const api = {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ isActive }),
+    }).then(json<ChannelDto>),
+
+  setDeliveryMode: (id: string, deliveryMode: DeliveryMode) =>
+    fetch(`${BASE}/channels/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deliveryMode }),
     }).then(json<ChannelDto>),
 
   deleteChannel: (id: string) => fetch(`${BASE}/channels/${id}`, { method: "DELETE" }),

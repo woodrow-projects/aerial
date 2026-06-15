@@ -22,9 +22,15 @@ export const hlsBitratesSchema = z
   .max(4)
   .default([64, 128]);
 
+/** Which outputs a channel emits (ADR D2). `both` = HLS + Icecast. */
+export const DELIVERY_MODES = ["hls", "icecast", "both"] as const;
+export const deliveryModeSchema = z.enum(DELIVERY_MODES);
+export type DeliveryMode = (typeof DELIVERY_MODES)[number];
+
 export const createChannelSchema = z.object({
   name: z.string().min(1).max(120),
   slug: slugSchema,
+  deliveryMode: deliveryModeSchema.default("both"),
   hlsBitrates: hlsBitratesSchema.optional(),
   icecastBitrate: z.number().int().positive().default(128).optional(),
 });
@@ -33,16 +39,18 @@ export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 export const updateChannelSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   isActive: z.boolean().optional(),
+  deliveryMode: deliveryModeSchema.optional(),
   hlsBitrates: hlsBitratesSchema.optional(),
   icecastBitrate: z.number().int().positive().optional(),
 });
 export type UpdateChannelInput = z.infer<typeof updateChannelSchema>;
 
-/** What a listener/operator needs to consume a channel from their own frontend (ADR D9). */
+/** What a listener/operator needs to consume a channel from their own frontend (ADR D9).
+ *  hls/icecast are null when the channel's deliveryMode doesn't emit that output. */
 export interface ChannelEndpoints {
-  hls: string; // .../hls/<slug>/live.m3u8
-  icecast: string; // .../icecast/<slug>
-  nowPlaying: string; // .../hls/<slug>/nowplaying.json
+  hls: string | null; // .../hls/<slug>/live.m3u8
+  icecast: string | null; // .../icecast/<slug>
+  nowPlaying: string; // .../hls/<slug>/nowplaying.json (always present)
   ingest: {
     host: string;
     port: number;
@@ -58,6 +66,7 @@ export interface ChannelDto {
   name: string;
   slug: string;
   isActive: boolean;
+  deliveryMode: DeliveryMode;
   hlsBitrates: number[];
   icecastBitrate: number;
   mount: string;

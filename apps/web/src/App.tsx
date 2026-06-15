@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChannelDto, StreamKeyCreatedDto, StreamKeyDto } from "@aerial/shared";
+import type { ChannelDto, DeliveryMode, StreamKeyCreatedDto, StreamKeyDto } from "@aerial/shared";
 import { api } from "./api";
 
 function slugify(name: string): string {
@@ -70,7 +70,7 @@ function CreateChannel({ onCreated, onError }: { onCreated: () => void; onError:
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.createChannel({ name, slug: slugValue });
+      await api.createChannel({ name, slug: slugValue, deliveryMode: "both" });
       setName("");
       setSlug("");
       onCreated();
@@ -130,8 +130,8 @@ function ChannelCard({
       </div>
 
       <div className="endpoints">
-        <Endpoint label="HLS" value={channel.endpoints.hls} />
-        <Endpoint label="Icecast" value={channel.endpoints.icecast} />
+        {channel.endpoints.hls && <Endpoint label="HLS" value={channel.endpoints.hls} />}
+        {channel.endpoints.icecast && <Endpoint label="Icecast" value={channel.endpoints.icecast} />}
         <Endpoint label="Now playing" value={channel.endpoints.nowPlaying} />
         <Endpoint
           label="DJ ingest"
@@ -162,6 +162,17 @@ function ChannelCard({
       </div>
 
       <div className="actions">
+        <label className="delivery" title="Changing this restarts the stream">
+          Delivery
+          <select
+            value={channel.deliveryMode}
+            onChange={(e) => wrap(api.setDeliveryMode(channel.id, e.target.value as DeliveryMode))}
+          >
+            <option value="both">HLS + Icecast</option>
+            <option value="hls">HLS only</option>
+            <option value="icecast">Icecast only</option>
+          </select>
+        </label>
         <button onClick={() => wrap(api.setActive(channel.id, !channel.isActive))}>
           {channel.isActive ? "Stop" : "Start"}
         </button>

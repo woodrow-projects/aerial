@@ -119,6 +119,7 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
       name: channel.name,
       mount: channel.mount,
       harborPort: channel.harborPort,
+      deliveryMode: channel.deliveryMode,
       hlsBitrates: channel.hlsBitrates,
       icecastBitrate: channel.icecastBitrate,
       hlsDir: join(env.engine.hlsRoot, channel.slug),

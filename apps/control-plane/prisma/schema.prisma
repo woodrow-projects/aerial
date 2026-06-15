@@ -18,18 +18,26 @@ model User {
   createdAt    DateTime @default(now())
 }
 
+/// Which outputs a channel emits (ADR D2). `both` = HLS + Icecast.
+enum DeliveryMode {
+  hls
+  icecast
+  both
+}
+
 /// A broadcastable channel. slug doubles as the HLS path prefix and Icecast mount.
 model Channel {
-  id             String   @id @default(uuid())
+  id             String       @id @default(uuid())
   name           String
-  slug           String   @unique
-  mount          String   @unique // "/<slug>"
-  isActive       Boolean  @default(true)
-  harborPort     Int      @unique // DJ ingest port (HARBOR_BASE_PORT + index)
-  hlsBitrates    Int[]    @default([64, 128]) // kbps, HE-AAC + AAC-LC
-  icecastBitrate Int      @default(128) // kbps MP3
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  slug           String       @unique
+  mount          String       @unique // "/<slug>"
+  isActive       Boolean      @default(true)
+  deliveryMode   DeliveryMode @default(both)
+  harborPort     Int          @unique // DJ ingest port (HARBOR_BASE_PORT + index)
+  hlsBitrates    Int[]        @default([64, 128]) // kbps, HE-AAC + AAC-LC
+  icecastBitrate Int          @default(128) // kbps MP3
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   streamKeys StreamKey[]
   sessions   StreamSession[]

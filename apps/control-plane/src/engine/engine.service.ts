@@ -7,18 +7,22 @@ import { PrismaService } from "../prisma/prisma.service";
 import { env } from "../config/env";
 import { buildLiquidsoapScript, type LiquidsoapParams } from "./liq-template";
 
-const RESTART_DELAY_MS = 3000;
+const RESTART_BASE_MS = 3000; // first retry delay
+const RESTART_MAX_MS = 60000; // cap on the exponential backoff
+const STABLE_MS = 60000; // a process up this long is "healthy" → reset backoff
 
 /**
  * Supervises one Liquidsoap child process per active channel (ADR D5/D6):
  * generates the script, spawns the process, streams logs, and restarts on
- * crash. Lifecycle is tied to the Nest app (boot all on start, drain on stop).
+ * crash with exponential backoff. Lifecycle is tied to the Nest app (boot all
+ * on start, drain on stop).
  */
 @Injectable()
 export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(EngineService.name);
   private readonly procs = new Map<string, ChildProcess>(); // channelId -> process
   private readonly stopping = new Set<string>(); // channelIds we intentionally stopped
+  private readonly restartCounts = new Map<string, number>(); // consecutive crash count
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -52,6 +56,7 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   stopChannel(channelId: string): void {
+    this.restartCounts.delete(channelId);
     const proc = this.procs.get(channelId);
     if (!proc) return;
     this.stopping.add(channelId);
@@ -70,6 +75,7 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
     const configPath = join(env.engine.configRoot, `${channel.slug}.liq`);
     writeFileSync(configPath, buildLiquidsoapScript(params));
 
+    const spawnedAt = Date.now();
     const proc = spawn(env.engine.liquidsoapBin, [configPath], {
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -92,8 +98,13 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
         this.stopping.delete(channel.id);
         return;
       }
-      this.logger.error(`Liquidsoap "${channel.slug}" exited (code ${code}); restarting in ${RESTART_DELAY_MS}ms`);
-      setTimeout(() => void this.restartIfStillActive(channel.id), RESTART_DELAY_MS);
+      // Exponential backoff, reset once a process has run long enough to be healthy.
+      const wasHealthy = Date.now() - spawnedAt >= STABLE_MS;
+      const count = (wasHealthy ? 0 : (this.restartCounts.get(channel.id) ?? 0)) + 1;
+      this.restartCounts.set(channel.id, count);
+      const delay = Math.min(RESTART_BASE_MS * 2 ** (count - 1), RESTART_MAX_MS);
+      this.logger.error(`Liquidsoap "${channel.slug}" exited (code ${code}); restart #${count} in ${delay}ms`);
+      setTimeout(() => void this.restartIfStillActive(channel.id), delay);
     });
   }
 

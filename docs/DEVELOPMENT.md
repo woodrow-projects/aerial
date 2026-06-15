@@ -77,6 +77,10 @@ Icecast 2.4) via `docker compose up`:
   goes live; a **plaintext** source to the public port is dropped; harbor ports are
   no longer publicly reachable.
 - `nowplaying.json` is written + served cacheable; the SPA and `/api/docs` are served via Caddy.
+- **Hardening** (all validated under the full stack): the control-plane container runs as the
+  **non-root** `liquidsoap` user (uid 10000); the DB schema is applied via **`prisma migrate
+  deploy`** (real migration history) on start; and the engine supervisor restarts crashed
+  Liquidsoap processes with **exponential backoff** (3s → cap 60s, reset after a healthy run).
 
 Fixes made during validation (now in the code): Liquidsoap `auth` takes a record;
 metadata uses `m["title"]` (no `??`); HLS needs `temp_dir`; both Liquidsoap
@@ -93,9 +97,6 @@ base `liquidsoap` entrypoint reset.
   parses it) — a later enhancement.
 - **Local-dev ingest TLS** needs a cert: run with `SITE_ADDRESS=localhost` (Caddy internal
   CA) or a real domain. With `SITE_ADDRESS=:80` the panel works but ingest TLS won't.
-- Schema is applied with `prisma db push` (no migration history yet); switch to
-  `migrate deploy` once you cut the first migration.
-- Liquidsoap runs as **root** inside the container (`allow_root`); fine in a container,
-  but running the control-plane as a non-root user is a later hardening step.
-- Engine restart is a fixed 3s retry with no backoff cap — a permanently-broken config
-  would respawn indefinitely; add backoff/alerting before relying on it unattended.
+- **Non-root volumes**: the control-plane runs as the non-root `liquidsoap` user (uid 10000),
+  so the `hls`/`media` volumes must be owned by it. Fresh volumes inherit this automatically;
+  volumes created under an older root setup must be `chown`ed or recreated.

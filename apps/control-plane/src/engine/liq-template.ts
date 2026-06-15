@@ -38,7 +38,8 @@ export function buildLiquidsoapScript(p: LiquidsoapParams): string {
 # Target: Liquidsoap 2.2.x
 # ─────────────────────────────────────────────────────────────────────────────
 log.level := 3
-# The control-plane container runs as root; Liquidsoap refuses root unless allowed.
+# Safety net if the container is overridden to run as root (it defaults to the
+# non-root 'liquidsoap' user, where this is a no-op). Liquidsoap refuses root otherwise.
 settings.init.allow_root := true
 settings.harbor.bind_addrs := ["0.0.0.0"]
 

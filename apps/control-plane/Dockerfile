@@ -42,12 +42,19 @@ RUN pnpm --filter @aerial/shared build \
 ENV NODE_ENV=production
 ENV WEB_DIST=/app/web
 ENV LIQUIDSOAP_BIN=/usr/bin/liquidsoap
+
+# Run as the non-root 'liquidsoap' user (uid 10000) from the base image. Pre-own
+# the runtime dirs so the named volumes inherit that ownership on first creation
+# (fresh volumes required — a volume created under the old root setup won't be
+# writable by this user).
+RUN mkdir -p /srv/hls /srv/media && chown -R 10000:10001 /srv
+USER 10000:10001
+
 WORKDIR /repo/apps/control-plane
 EXPOSE 3000
 
 # Reset the savonet base image's `liquidsoap` entrypoint so our CMD runs in a shell.
 ENTRYPOINT []
 
-# Sync schema (scaffold uses `db push`; switch to `migrate deploy` once migrations
-# exist), then start.
-CMD ["sh", "-c", "pnpm exec prisma db push --skip-generate && node dist/main.js"]
+# Apply DB migrations (ADR D11), then start.
+CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node dist/main.js"]

@@ -39,9 +39,7 @@ fi
 say "Building and starting the stack…"
 docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
 
-say "Running database migrations…"
-docker compose -f deploy/docker-compose.yml exec -T control-plane node node_modules/prisma/build/index.js migrate deploy || \
-	say "Migrations will run on container start; if this failed, check logs."
+# Database migrations (`prisma migrate deploy`) run automatically on control-plane start.
 
-say "Done. Stack is up. Tail logs with:"
+say "Done. Stack is up (migrations run on control-plane start). Tail logs with:"
 echo "    docker compose -f deploy/docker-compose.yml logs -f"

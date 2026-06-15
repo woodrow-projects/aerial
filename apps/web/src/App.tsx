@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ChannelDto, DeliveryMode, StreamKeyCreatedDto, StreamKeyDto } from "@aerial/shared";
 import { api } from "./api";
+import { signOut, useSession } from "./auth-client";
+import { Login } from "./Login";
 
 function slugify(name: string): string {
   return name
@@ -11,6 +13,19 @@ function slugify(name: string): string {
 }
 
 export function App() {
+  const { data: session, isPending } = useSession();
+  if (isPending) {
+    return (
+      <div className="app">
+        <p className="muted">Loading…</p>
+      </div>
+    );
+  }
+  if (!session) return <Login />;
+  return <Dashboard />;
+}
+
+function Dashboard() {
   const [channels, setChannels] = useState<ChannelDto[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,9 +46,17 @@ export function App() {
   return (
     <div className="app">
       <header>
-        <h1>
-          Aerial <span className="tag">control plane</span>
-        </h1>
+        <div className="header-row">
+          <h1>
+            Aerial <span className="tag">control plane</span>
+          </h1>
+          <button
+            className="signout"
+            onClick={() => signOut({ fetchOptions: { onSuccess: () => location.assign("/") } })}
+          >
+            Sign out
+          </button>
+        </div>
         <p className="muted">Self-hosted radio. Self-host the brain, rent the edge.</p>
       </header>
 

@@ -34,6 +34,19 @@ export const env = {
     configRoot: process.env.LIQUIDSOAP_CONFIG_ROOT ?? "/tmp/aerial-liq",
   },
 
+  auth: {
+    // >=32 chars; `openssl rand -base64 32`. Missing => sessions silently break.
+    secret: process.env.BETTER_AUTH_SECRET ?? "",
+    // Lock public registration once the first operator(s) exist.
+    disableSignUp: process.env.AUTH_DISABLE_SIGNUP === "true",
+    // The browser sends the Vite dev origin even through the proxy; better-auth's
+    // CSRF/Origin check rejects POSTs from origins not listed here.
+    trustedOrigins:
+      process.env.AUTH_TRUSTED_ORIGINS?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean) ?? (process.env.NODE_ENV === "production" ? [] : ["http://localhost:5173"]),
+  },
+
   webDist: process.env.WEB_DIST ?? "/app/web",
 } as const;
 

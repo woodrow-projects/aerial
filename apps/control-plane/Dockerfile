@@ -4,11 +4,13 @@
 FROM savonet/liquidsoap:v2.2.5
 
 USER root
-ENV NODE_VERSION=20.18.0
+# Node 26 (matches the dev host). Needs require(ESM) for better-auth (ESM-only);
+# the old 20.18 pin lacked it.
+ENV NODE_VERSION=26.3.0
 
 # Node from the official arch-aware tarball (NodeSource doesn't track Debian sid).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl xz-utils ca-certificates \
+ && apt-get install -y --no-install-recommends curl xz-utils ca-certificates libatomic1 \
  && rm -rf /var/lib/apt/lists/* \
  && ARCH="$(uname -m)" \
  && case "$ARCH" in \

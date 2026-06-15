@@ -1,7 +1,9 @@
 import { existsSync } from "node:fs";
 import { Module, type DynamicModule } from "@nestjs/common";
+import { APP_GUARD } from "@nestjs/core";
 import { ConfigModule } from "@nestjs/config";
 import { ServeStaticModule } from "@nestjs/serve-static";
+import { AuthGuard } from "./auth/auth.guard";
 import { env } from "./config/env";
 import { PrismaModule } from "./prisma/prisma.module";
 import { EngineModule } from "./engine/engine.module";
@@ -31,5 +33,7 @@ const staticImports: DynamicModule[] = existsSync(env.webDist)
     ChannelsModule,
     InternalModule,
   ],
+  // Global operator-session guard; controllers opt out with @Public().
+  providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
 export class AppModule {}

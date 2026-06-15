@@ -61,6 +61,27 @@ pnpm --filter @aerial/web dev                # :5173  (proxies /api → :3000)
 4. Play the **HLS** URL (`/hls/<slug>/live.m3u8`) in Safari/Chrome and the **Icecast**
    URL in VLC. Fetch **`/hls/<slug>/nowplaying.json`** and watch it update.
 
+## Operator auth (better-auth)
+
+The `/api/*` surface requires an operator session (ADR D13). Setup:
+
+1. Set `BETTER_AUTH_SECRET` (>=32 chars: `openssl rand -base64 32`) in `.env`.
+2. Bring the stack up, then **seed the first operator** while signup is open:
+   ```bash
+   docker compose -f deploy/docker-compose.yml exec \
+     -e OPERATOR_EMAIL=you@example.com -e OPERATOR_PASSWORD='strong-pw' \
+     control-plane pnpm seed:operator
+   ```
+   (or just sign up once via the login page).
+3. Set `AUTH_DISABLE_SIGNUP=true` and redeploy to lock public registration.
+4. **Social login** (optional): set `GOOGLE_CLIENT_ID/SECRET` and/or `GITHUB_CLIENT_ID/SECRET`, register the
+   redirect URI `<PUBLIC_BASE_URL>/api/auth/callback/<provider>`, and rebuild the SPA with
+   `VITE_GOOGLE_ENABLED=1` / `VITE_GITHUB_ENABLED=1` to show the buttons.
+
+> Requires the control-plane image's Node 26 (better-auth is ESM-only → needs `require(ESM)`). Local dev over
+> `http://localhost` works because `useSecureCookies` is gated on `NODE_ENV==='production'`; the Vite-dev
+> proxy origin (`http://localhost:5173`) is in `trustedOrigins` by default.
+
 ## Validated end-to-end ✅
 
 The full audio pipeline has been run against the real engine (Liquidsoap **2.2.5**,

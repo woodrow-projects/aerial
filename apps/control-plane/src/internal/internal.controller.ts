@@ -9,6 +9,7 @@ import {
 } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
 import { InternalTokenGuard } from "../common/internal-token.guard";
+import { Public } from "../auth/auth.guard";
 import { StreamKeysService } from "../channels/stream-keys.service";
 import { NowPlayingService } from "../nowplaying/nowplaying.service";
 
@@ -16,7 +17,10 @@ import { NowPlayingService } from "../nowplaying/nowplaying.service";
  * Hooks called by the Liquidsoap engine over the internal network. Guarded by a
  * shared token (ADR D10). Not part of the public API surface.
  */
+// @Public() exempts these hooks from the global operator AuthGuard (Liquidsoap
+// carries no session cookie); the shared-token InternalTokenGuard still enforces.
 @Controller("internal")
+@Public()
 @UseGuards(InternalTokenGuard)
 export class InternalController {
   constructor(

@@ -69,6 +69,26 @@ header h1 {
   gap: 10px;
 }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signout {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+}
+
+.login {
+  display: grid;
+  gap: 10px;
+  max-width: 380px;
+}
+
 input {
   flex: 1;
   background: var(--panel-2);

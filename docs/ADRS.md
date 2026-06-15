@@ -22,6 +22,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D10 | Security baseline (hashed keys, TLS, operator accounts, kill switch) | Accepted |
 | D11 | Postgres in-compose + off-VM backup; S3-compatible media; Caddy proxy | Accepted |
 | D12 | Opinionated defaults ON (R128 loudness, gapless, auto-TLS, sane bitrates) | Accepted |
+| D13 | Operator auth via better-auth (rejected OpenAuth) | Accepted |
 
 ---
 
@@ -212,3 +213,31 @@ are ON by default with few knobs.
 
 **Rationale.** A ruthlessly opinionated, great-defaults UX is a deliberate differentiator versus AzuraCast's
 dense power-user surface, and it directly serves the "ship with ease" goal.
+
+---
+
+## D13 — Operator auth via better-auth (rejected OpenAuth)
+
+**Context.** The control plane shipped with an unauthenticated `/api/*` surface (only `/internal/*` was
+token-guarded). It needs operator login before exposing sensitive mutations (media upload, CDN API keys,
+spend caps). Near-term needs: a few operator accounts + social/SSO (Google/GitHub).
+
+**Decision.** Use **better-auth** (in-app, Postgres/Prisma-native) for operator auth. better-auth owns the
+`user/session/account/verification` tables (the unused legacy `User` model was dropped); its web handler is
+mounted on a raw Fastify route `/api/auth/*`; a global Nest `AuthGuard` validates the session on every
+controller route, with `@Public()` exempting `/internal/*` (which keeps its token guard) and the future
+public analytics beacon. The SPA uses `better-auth/react` (same-origin — no CORS/baseURL). Sessions are
+httpOnly + SameSite=Lax cookies (Secure in production). Social providers (Google/GitHub) are **env-gated**:
+off in v1, switched on by setting credentials and rebuilding — no handler/guard change.
+
+**Rejected — OpenAuth (`@openauthjs/openauth`).** A standalone OAuth2 **issuer** (a 5th internet-facing
+service) whose reason to exist (multi-app SSO, multi-tenant token issuance, third-party API clients) is
+unused for one operator on a same-origin SPA. It has no first-party Postgres storage adapter (only
+Memory/DynamoDB/Cloudflare KV), bypasses the existing `User` model, forces an SMTP email flow for register,
+and is pre-1.0 / dormant (0.4.3, transferred out of the SST org). It contradicts the "minimal moving parts,
+non-developer can recover it" goal. better-auth covers the few-accounts + social/SSO needs in-app with zero
+new services.
+
+**Consequence.** better-auth is ESM-only and NestJS builds CommonJS, so the runtime needs `require(ESM)` —
+the control-plane image was bumped from Node 20.18 to **Node 26** (also requires `libatomic1` in the savonet
+base). See `docs/DEVELOPMENT.md` for the first-operator seed flow and env vars.

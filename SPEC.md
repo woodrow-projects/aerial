@@ -106,3 +106,18 @@ player is deferred.)
 Origin host default **Hetzner** (cheap/flat egress); CDN default **Bunny.net** (no per-request fee).
 Providers are chosen by **egress model**, not VM price. Cloudflare audio paths only with fair-use validation;
 CloudFront only if already AWS-locked.
+
+## 10. Engineering practices (quality bar)
+
+**Test-Driven Development is mandatory** for all new and changed behaviour — see [ADR D14](./docs/ADRS.md#d14--test-driven-development-is-mandatory).
+
+- **Test-first, red→green→refactor.** Write a failing `*.spec.ts` that pins the intended behaviour, watch it
+  fail, write the minimum code to pass, then refactor under green. No production logic merges without a test
+  that was written to fail first; bug fixes start with a failing regression test.
+- **Vitest**, unit tests next to the code as `<name>.spec.ts`, fully mocked (no real Postgres/Liquidsoap/
+  network). Run `pnpm test` (CI), `pnpm test:watch` (dev), `pnpm test:coverage`. Coverage is a per-change
+  ratchet — new/changed lines covered, suite stays green — not a chase to 100%.
+- **Integration/e2e stays real and separate:** the docker-compose engine validation (real Liquidsoap 2.2.x +
+  Icecast, DJ ingest, HLS/Icecast output) is the integration layer and is **not** mocked into the unit suite.
+- **Backlog:** a CI workflow that runs `pnpm test` on every PR and blocks merge on red. Until then TDD is
+  enforced by discipline and review.

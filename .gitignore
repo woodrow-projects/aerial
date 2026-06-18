@@ -10,6 +10,9 @@ build/
 # turbo
 .turbo/
 
+# test coverage
+coverage/
+
 # env / secrets — NEVER commit (see ADR D10)
 .env
 .env.*

@@ -23,6 +23,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D11 | Postgres in-compose + off-VM backup; S3-compatible media; Caddy proxy | Accepted |
 | D12 | Opinionated defaults ON (R128 loudness, gapless, auto-TLS, sane bitrates) | Accepted |
 | D13 | Operator auth via better-auth (rejected OpenAuth) | Accepted |
+| D14 | Test-Driven Development is mandatory (Vitest; test-first) | Accepted |
 
 ---
 
@@ -241,3 +242,49 @@ new services.
 **Consequence.** better-auth is ESM-only and NestJS builds CommonJS, so the runtime needs `require(ESM)` —
 the control-plane image was bumped from Node 20.18 to **Node 26** (also requires `libatomic1` in the savonet
 base). See `docs/DEVELOPMENT.md` for the first-operator seed flow and env vars.
+
+---
+
+## D14 — Test-Driven Development is mandatory
+
+**Context.** The v1 core was de-risked by **manual** end-to-end validation against the real engine
+(Liquidsoap 2.2.5 / Icecast 2.4) via `docker compose up` — the right call for proving an unusual
+audio-delivery architecture, but it shipped **zero automated tests**. The core contracts are now locked
+(ADR D1–D13), so the regression risk of changing them silently is high and rising.
+
+**Decision.** **TDD is non-negotiable for all new and changed behaviour going forward.** Concretely:
+
+- **Test-first, red→green→refactor.** Write a failing `*.spec.ts` that pins the intended behaviour, watch it
+  fail, then write the minimum code to pass, then refactor under green. No production logic lands without a
+  test that was written to fail first.
+- **Vitest** is the runner. Unit tests live **next to the code** as `<name>.spec.ts` and are pure: no real
+  Postgres, no real Liquidsoap, no network — collaborators (Prisma, `http.post`, the engine) are mocked.
+  Harness: `apps/control-plane/vitest.config.ts`; run with `pnpm test` (CI), `pnpm test:watch` (dev),
+  `pnpm test:coverage`.
+- **Coverage is a ratchet, not a gate-to-100.** New/changed lines must be covered; the suite must stay
+  green. Wiring-only files (`*.module.ts`, `main.ts`) are excluded — they carry no logic worth a unit test.
+- **Integration/e2e stays real and separate.** The docker-compose engine validation (real Liquidsoap +
+  Icecast, DJ ingest, HLS/Icecast output) remains the integration layer and is **not** mocked into the unit
+  suite; it is run/automated separately (backlog: wire it into CI).
+- **Bug fixes start with a failing regression test** that reproduces the bug before the fix.
+
+**Rationale.** The control plane's hard parts — stream-key issuance/verification (D10), the per-channel
+Liquidsoap config generator (D2/D6), the fail-closed internal-token guard (D10), engine lifecycle — are
+exactly the logic where a silent regression is most damaging and least visible by eye. These are also highly
+unit-testable (a pure config generator; pure-ish guards; services over a mockable Prisma), so the cost of
+test-first is low and the payoff is direct. Test-first (vs test-after) is mandated because it forces the
+contract to be stated before the implementation biases it, and guarantees the test can actually fail.
+
+**Rejected.**
+- *Test-after / "we'll add tests later":* the v1 reality shows "later" became "never"; it also lets tests
+  ratify whatever the code happens to do rather than the intended contract.
+- *Mocking the engine into the unit suite as the only coverage:* a mocked Liquidsoap proves nothing about
+  the real 2.2.x signatures — the compose-based integration check is irreplaceable and is kept distinct.
+- *A hard global coverage threshold (e.g. 90%):* on a codebase starting near 0% this blocks all work or
+  invites assertion-free filler tests; a per-change ratchet targets the lines that actually changed.
+
+**Consequence.** First suite stood up in `apps/control-plane`: `liq-template.spec.ts` (config generator,
+100%), `internal-token.guard.spec.ts` (fail-closed auth, 100%), `stream-keys.service.spec.ts` (issuance +
+verification). `vitest` + `@vitest/coverage-v8` are dev dependencies; `turbo run test` already fans the
+`test` script across the workspace. **Backlog:** a CI workflow (`.github/workflows`) that runs `pnpm test`
+on every PR and blocks merge on red — until then, TDD is enforced by discipline and review.

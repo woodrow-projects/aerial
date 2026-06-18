@@ -51,6 +51,12 @@ Delivery has two paths: **HLS** (default, CDN-cacheable, web/mobile, ~16–24s) 
 ~2–8s, legacy/interactive/directories). The CDN only ever serves HLS. Full detail in
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md).
 
+> **Keep the system diagram current.** The implemented-state component diagram lives in
+> [`SYSTEM-DIAGRAM.md`](./SYSTEM-DIAGRAM.md). **Whenever a system component is added, removed, or rewired** —
+> a Compose service/volume, a control-plane module, a Caddy route, or an engine output — **update
+> [`SYSTEM-DIAGRAM.md`](./SYSTEM-DIAGRAM.md) (and this summary) in the same change** so the docs never drift
+> from the running stack.
+
 ## 5. Data model (initial)
 
 - `users` — operator accounts (control-panel auth).

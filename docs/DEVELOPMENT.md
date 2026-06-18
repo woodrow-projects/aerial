@@ -8,6 +8,10 @@ Monorepo: **pnpm workspaces + Turborepo**. Packages:
 - `engine/icecast` — Icecast image; `engine/liquidsoap` — generated-config notes
 - `deploy/` — Docker Compose, Caddy, installer
 
+> **Adding or removing a system component?** Update the current-state diagram in
+> [`SYSTEM-DIAGRAM.md`](../SYSTEM-DIAGRAM.md) (and `docs/ARCHITECTURE.md` if the design changes) in the same
+> PR — a new Compose service/volume, control-plane module, Caddy route, or engine output all count.
+
 ## Prerequisites
 
 - Node 20 (`nvm use`), pnpm via Corepack (`corepack enable`)

@@ -10,6 +10,10 @@ See [`ADRS.md`](./ADRS.md) for the decisions behind every component, and
 
 ## Topology
 
+> This is the **design/target** topology and may include fast-follow items. The **current implemented state**
+> is the root [`SYSTEM-DIAGRAM.md`](../SYSTEM-DIAGRAM.md). **When a system component is added, removed, or
+> rewired, update both diagrams** (and the component table below) in the same PR.
+
 ```mermaid
 graph TD
     subgraph Internet

@@ -14,6 +14,10 @@ export const env = {
 
   databaseUrl: process.env.DATABASE_URL ?? "",
 
+  // Secret for at-rest encryption of provider credentials (e.g. the CDN API key).
+  // >=32 chars; `openssl rand -base64 32`. Distinct from BETTER_AUTH_SECRET.
+  appSecret: process.env.APP_SECRET ?? "",
+
   internal: {
     apiUrl: (process.env.INTERNAL_API_URL ?? "http://localhost:3000").replace(/\/$/, ""),
     token: process.env.INTERNAL_API_TOKEN ?? "",

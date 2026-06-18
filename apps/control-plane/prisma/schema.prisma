@@ -21,6 +21,38 @@ enum DeliveryMode {
   both
 }
 
+/// CDN providers Aerial can auto-provision (ADR D4 — Bunny-first, pluggable).
+
+enum CdnProvider {
+  bunny
+}
+
+/// One-toggle CDN lifecycle (SPEC §7.2): disabled → provisioning → active | error.
+
+enum CdnStatus {
+  disabled
+  provisioning
+  active
+  error
+}
+
+/// Singleton CDN configuration (one per install). `apiKeyEnc` is the operator's
+/// Bunny API key, AES-256-GCM encrypted at rest (NOT hashed — it must be replayable
+/// to Bunny). `pullZoneId` is persisted before further config so a retried enable
+/// resumes instead of creating a duplicate zone (idempotent state machine).
+
+model CdnConfig {
+  id           Int         @id @default(1) // singleton row (always id = 1)
+  provider     CdnProvider @default(bunny)
+  status       CdnStatus   @default(disabled)
+  pullZoneId   String? // Bunny pull-zone id, kept across disable so embeds keep working
+  cdnHostname  String? // <zone>.b-cdn.net
+  apiKeyEnc    String? // AES-256-GCM ciphertext of the Bunny API key
+  errorMessage String? // last provisioning error (when status = error)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
 /// A broadcastable channel. slug doubles as the HLS path prefix and Icecast mount.
 
 model Channel {

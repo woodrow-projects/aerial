@@ -1,4 +1,5 @@
 import type {
+  CdnConfigDto,
   ChannelDto,
   CreateChannelInput,
   DeliveryMode,
@@ -51,4 +52,18 @@ export const api = {
 
   revokeKey: (id: string, keyId: string) =>
     fetch(`${BASE}/channels/${id}/keys/${keyId}`, { method: "DELETE" }),
+
+  // ── CDN (one-toggle) ──
+  getCdn: () => fetch(`${BASE}/cdn`).then(json<CdnConfigDto>),
+
+  setCdnKey: (apiKey: string) =>
+    fetch(`${BASE}/cdn/key`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ apiKey }),
+    }).then(json<CdnConfigDto>),
+
+  enableCdn: () => fetch(`${BASE}/cdn/enable`, { method: "POST" }).then(json<CdnConfigDto>),
+
+  disableCdn: () => fetch(`${BASE}/cdn/disable`, { method: "POST" }).then(json<CdnConfigDto>),
 };

@@ -4,6 +4,7 @@ import type { ChannelDto, ChannelEndpoints, CreateChannelInput, UpdateChannelInp
 import { PrismaService } from "../prisma/prisma.service";
 import { EngineService } from "../engine/engine.service";
 import { NowPlayingService } from "../nowplaying/nowplaying.service";
+import { CdnService } from "../cdn/cdn.service";
 import { env } from "../config/env";
 
 @Injectable()
@@ -12,6 +13,7 @@ export class ChannelsService {
     private readonly prisma: PrismaService,
     private readonly engine: EngineService,
     private readonly nowPlaying: NowPlayingService,
+    private readonly cdn: CdnService,
   ) {}
 
   async list(): Promise<ChannelDto[]> {
@@ -100,19 +102,23 @@ export class ChannelsService {
   }
 
   private endpoints(channel: Channel): ChannelEndpoints {
-    const base = env.publicBaseUrl;
+    const origin = env.publicBaseUrl;
+    // HLS (and its sidecar nowplaying.json) resolve to the CDN when it's active,
+    // else the origin. Icecast + DJ ingest are ALWAYS origin-direct — never CDN the
+    // persistent stream or the ingest path (ADR D2 hard rule, enforced here in code).
+    const hlsBase = this.cdn.hlsBaseUrl();
     let ingestHost: string;
     try {
-      ingestHost = new URL(base).hostname;
+      ingestHost = new URL(origin).hostname;
     } catch {
       ingestHost = "localhost";
     }
     const emitHls = channel.deliveryMode === "hls" || channel.deliveryMode === "both";
     const emitIcecast = channel.deliveryMode === "icecast" || channel.deliveryMode === "both";
     return {
-      hls: emitHls ? `${base}/hls/${channel.slug}/live.m3u8` : null,
-      icecast: emitIcecast ? `${base}/icecast/${channel.slug}` : null,
-      nowPlaying: `${base}/hls/${channel.slug}/nowplaying.json`,
+      hls: emitHls ? `${hlsBase}/hls/${channel.slug}/live.m3u8` : null,
+      icecast: emitIcecast ? `${origin}/icecast/${channel.slug}` : null,
+      nowPlaying: `${hlsBase}/hls/${channel.slug}/nowplaying.json`,
       ingest: {
         host: ingestHost,
         port: channel.harborPort,

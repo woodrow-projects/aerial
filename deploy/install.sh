@@ -22,11 +22,13 @@ if [[ ! -f .env ]]; then
 		PW_DB="$(openssl rand -hex 16)"
 		PW_SRC="$(openssl rand -hex 16)"
 		PW_ADM="$(openssl rand -hex 16)"
+		APP_SEC="$(openssl rand -hex 32)" # at-rest encryption key for the CDN API key
 		sed -i.bak \
 			-e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PW_DB}|" \
 			-e "s|^DATABASE_URL=.*|DATABASE_URL=postgresql://aerial:${PW_DB}@postgres:5432/aerial?schema=public|" \
 			-e "s|^ICECAST_SOURCE_PASSWORD=.*|ICECAST_SOURCE_PASSWORD=${PW_SRC}|" \
 			-e "s|^ICECAST_ADMIN_PASSWORD=.*|ICECAST_ADMIN_PASSWORD=${PW_ADM}|" \
+			-e "s|^APP_SECRET=.*|APP_SECRET=${APP_SEC}|" \
 			.env && rm -f .env.bak
 		say "Generated random secrets in .env."
 	else

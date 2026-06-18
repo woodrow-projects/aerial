@@ -9,6 +9,7 @@ import { PrismaModule } from "./prisma/prisma.module";
 import { EngineModule } from "./engine/engine.module";
 import { NowPlayingModule } from "./nowplaying/nowplaying.module";
 import { ChannelsModule } from "./channels/channels.module";
+import { CdnModule } from "./cdn/cdn.module";
 import { InternalModule } from "./internal/internal.module";
 
 // Serve the built SPA only when present (baked into the image in prod; absent in
@@ -31,6 +32,7 @@ const staticImports: DynamicModule[] = existsSync(env.webDist)
     EngineModule,
     NowPlayingModule,
     ChannelsModule,
+    CdnModule,
     InternalModule,
   ],
   // Global operator-session guard; controllers opt out with @Public().

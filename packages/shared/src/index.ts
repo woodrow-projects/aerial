@@ -111,6 +111,34 @@ export interface NowPlayingDto {
   updatedAt: string;
 }
 
+// ── CDN (one-toggle auto-provisioning, ADR D4 / SPEC §7.2) ──────────────────────
+
+/** CDN providers Aerial can auto-provision. Bunny-first; pluggable per ADR D4. */
+export const CDN_PROVIDERS = ["bunny"] as const;
+export const cdnProviderSchema = z.enum(CDN_PROVIDERS);
+export type CdnProvider = (typeof CDN_PROVIDERS)[number];
+
+/** Provisioning lifecycle: disabled → provisioning → active | error. */
+export const CDN_STATUSES = ["disabled", "provisioning", "active", "error"] as const;
+export const cdnStatusSchema = z.enum(CDN_STATUSES);
+export type CdnStatus = (typeof CDN_STATUSES)[number];
+
+/** Operator pastes their account-level Bunny API key (stored encrypted at rest). */
+export const cdnKeySchema = z.object({
+  apiKey: z.string().min(1, "API key is required"),
+});
+export type CdnKeyInput = z.infer<typeof cdnKeySchema>;
+
+/** CDN status surfaced to the operator. The API key itself is never returned. */
+export interface CdnConfigDto {
+  provider: CdnProvider;
+  status: CdnStatus;
+  hasApiKey: boolean; // whether a key is stored (never the key itself)
+  cdnHostname: string | null; // <zone>.b-cdn.net once provisioned
+  errorMessage: string | null; // populated when status === "error"
+  updatedAt: string;
+}
+
 // ── Internal: Liquidsoap harbor auth hook ──────────────────────────────────────
 
 export const authHookSchema = z.object({

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ChannelDto, DeliveryMode, StreamKeyCreatedDto, StreamKeyDto } from "@aerial/shared";
+import type { CdnConfigDto, ChannelDto, DeliveryMode, StreamKeyCreatedDto, StreamKeyDto } from "@aerial/shared";
 import { api } from "./api";
 import { signOut, useSession } from "./auth-client";
 import { Login } from "./Login";
@@ -70,6 +70,8 @@ function Dashboard() {
         onError={setError}
       />
 
+      <CdnSettings onError={setError} onChange={refresh} />
+
       {loading ? (
         <p className="muted">Loading…</p>
       ) : channels.length === 0 ? (
@@ -113,6 +115,101 @@ function CreateChannel({ onCreated, onError }: { onCreated: () => void; onError:
         </button>
       </div>
     </form>
+  );
+}
+
+function CdnSettings({ onError, onChange }: { onError: (e: string) => void; onChange: () => void }) {
+  const [cdn, setCdn] = useState<CdnConfigDto | null>(null);
+  const [keyInput, setKeyInput] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = () => api.getCdn().then(setCdn).catch(() => undefined);
+  useEffect(() => {
+    void load();
+  }, []);
+
+  // While provisioning, poll so the operator watches provisioning → active live.
+  useEffect(() => {
+    if (cdn?.status !== "provisioning") return;
+    const t = setInterval(() => {
+      void api.getCdn().then((next) => {
+        setCdn(next);
+        if (next.status !== "provisioning") onChange(); // endpoints just flipped to the CDN
+      });
+    }, 3000);
+    return () => clearInterval(t);
+  }, [cdn?.status]);
+
+  const run = (p: Promise<CdnConfigDto>) => {
+    setBusy(true);
+    p.then((next) => {
+      setCdn(next);
+      onChange();
+    })
+      .catch((e) => onError(String((e as Error).message ?? e)))
+      .finally(() => setBusy(false));
+  };
+
+  if (!cdn) return null;
+
+  const status = cdn.status;
+  const badgeClass =
+    status === "active" ? "badge on" : status === "error" ? "badge off" : status === "provisioning" ? "badge live" : "badge";
+
+  return (
+    <div className="card cdn">
+      <div className="channel-head">
+        <div>
+          <h2>CDN delivery</h2>
+          <code className="muted">Bunny.net · one toggle</code>
+        </div>
+        <span className={badgeClass}>{status}</span>
+      </div>
+
+      <p className="muted">
+        Front HLS with a CDN so a viral spike becomes a budget line, not a re-platform. The Icecast mount and DJ
+        ingest always stay origin-direct. The CDN is the spike/global layer — at steady low traffic a flat-egress
+        origin can be cheaper.
+      </p>
+
+      {cdn.cdnHostname && status === "active" && (
+        <div className="endpoints">
+          <Endpoint label="CDN host" value={`https://${cdn.cdnHostname}`} />
+        </div>
+      )}
+
+      {status === "error" && cdn.errorMessage && <div className="error">{cdn.errorMessage}</div>}
+
+      <div className="row">
+        <input
+          type="password"
+          placeholder={cdn.hasApiKey ? "Bunny API key (stored — paste to replace)" : "Paste your Bunny.net API key"}
+          value={keyInput}
+          onChange={(e) => setKeyInput(e.target.value)}
+        />
+        <button
+          disabled={busy || !keyInput}
+          onClick={() => run(api.setCdnKey(keyInput).then((next) => {
+            setKeyInput("");
+            return next;
+          }))}
+        >
+          Save key
+        </button>
+      </div>
+
+      <div className="actions">
+        {status === "active" || status === "provisioning" ? (
+          <button disabled={busy || status === "provisioning"} onClick={() => run(api.disableCdn())}>
+            Disable CDN
+          </button>
+        ) : (
+          <button disabled={busy || !cdn.hasApiKey} title={cdn.hasApiKey ? "" : "Save an API key first"} onClick={() => run(api.enableCdn())}>
+            Enable CDN
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

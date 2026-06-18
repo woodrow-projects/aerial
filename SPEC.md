@@ -85,8 +85,9 @@ player is deferred.)
 - **v1 (core — live + self-host):** the architecture above; multi-channel live ingest; HLS + Icecast;
   now-playing; auto-TLS; loudness/gapless defaults; **delivery direct from the VM, no CDN**.
 - **Fast-follow (Auto-DJ + CDN toggle + cost):** Auto-DJ from S3-compatible storage via the same
-  `fallback()` chain; media library + upload; CDN auto-provisioning toggle (Bunny); cost-transparency /
-  spend-cap dashboard; CDN-aware analytics.
+  `fallback()` chain; media library + upload; CDN auto-provisioning toggle (Bunny — see
+  [`docs/plans/one-toggle-cdn.md`](./docs/plans/one-toggle-cdn.md)); cost-transparency / spend-cap dashboard;
+  CDN-aware analytics.
 - **Scale + harden:** CDN-over-HLS as the lever; vertical NIC headroom first; optional self-run relay nodes;
   warm-standby origin (HA); optional LL-HLS. *Future:* in-browser WebRTC "Go Live"; PaaS 1-click template; a
   hosted/SaaS tier from the same artifact.

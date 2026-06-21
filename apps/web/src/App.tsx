@@ -167,8 +167,8 @@ function CdnSettings({ onError, onChange }: { onError: (e: string) => void; onCh
       </div>
 
       <p className="muted">
-        Front HLS with a CDN so a viral spike becomes a budget line, not a re-platform. The Icecast mount and DJ
-        ingest always stay origin-direct. The CDN is the spike/global layer — at steady low traffic a flat-egress
+        Front HLS with a CDN so a viral spike becomes a budget line, not a re-platform. The Icecast mount and
+        streamer ingest always stay origin-direct. The CDN is the spike/global layer — at steady low traffic a flat-egress
         origin can be cheaper.
       </p>
 
@@ -254,7 +254,7 @@ function ChannelCard({
         {channel.endpoints.icecast && <Endpoint label="Icecast" value={channel.endpoints.icecast} />}
         <Endpoint label="Now playing" value={channel.endpoints.nowPlaying} />
         <Endpoint
-          label="DJ ingest"
+          label="Streamer ingest"
           value={`${channel.endpoints.ingest.host}:${channel.endpoints.ingest.port}${channel.endpoints.ingest.mount}  (user: source${channel.endpoints.ingest.tls ? ", TLS" : ""})`}
         />
       </div>

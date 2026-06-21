@@ -105,7 +105,7 @@ def auth(req) =
   resp.status_code == 200
 end
 
-# Live DJ input. on_connect/on_disconnect report "live" status to the control plane.
+# Live streamer input. on_connect/on_disconnect report "live" status to the control plane.
 live = input.harbor(
   "${p.mount}",
   port=${p.harborPort},
@@ -119,7 +119,7 @@ live = input.harbor(
 # Fallback loop. mksafe guarantees the mount never drops (silence if empty).
 loop = mksafe(playlist("${p.mediaDir}", mode="randomize", reload_mode="watch"))
 
-# Instant cutover to live the moment a DJ connects (track_sensitive=false).
+# Instant cutover to live the moment a streamer connects (track_sensitive=false).
 radio = fallback(track_sensitive=false, [live, loop])
 
 # Loudness: placeholder normalization. TODO: replace with true EBU R128 (D12).

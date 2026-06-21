@@ -25,8 +25,8 @@ It's a modern, opinionated alternative to AzuraCast.
 ## How it works (in one picture)
 
 ```
-DJ (BUTT/Mixxx) ─▶ TLS ─▶ Liquidsoap (per channel) ─┬─▶ HLS rendition set ─▶ Caddy ─▶ [CDN] ─▶ web/mobile
-                                                     └─▶ Icecast mount  ────▶ Caddy ─────────▶ VLC/Sonos/car
+Streamer (BUTT/Mixxx) ─▶ TLS ─▶ Liquidsoap (per channel) ─┬─▶ HLS rendition set ─▶ Caddy ─▶ [CDN] ─▶ web/mobile
+                                                           └─▶ Icecast mount  ────▶ Caddy ─────────▶ VLC/Sonos/car
 NestJS control plane: channels · stream keys · supervises Liquidsoap · now-playing · cost   (state ▶ Postgres)
 ```
 
@@ -46,7 +46,7 @@ Two delivery paths: **HLS** (default — CDN-cacheable, web/mobile) and an origi
 
 🟢 **v1 core built and validated end-to-end.** The architecture/decisions are locked, the monorepo is
 scaffolded, and the live pipeline has been run via `docker compose up` against real Liquidsoap 2.2.5 +
-Icecast: channel CRUD → engine spawn → HLS + Icecast delivery → stream-key-authed DJ ingest → fallback↔live
+Icecast: channel CRUD → engine spawn → HLS + Icecast delivery → stream-key-authed streamer ingest → fallback↔live
 crossfade → now-playing. Next: Auto-DJ, CDN toggle, cost dashboard (fast-follow).
 
 - Product spec → [`SPEC.md`](./SPEC.md)

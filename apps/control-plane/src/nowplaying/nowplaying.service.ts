@@ -12,7 +12,7 @@ interface State {
 }
 
 /**
- * Owns now-playing metadata + DJ-live state (ADR D8). On every change it writes
+ * Owns now-playing metadata + live (streamer-on-air) state (ADR D8). On every change it writes
  * a cacheable `nowplaying.json` into the channel's HLS dir so the CDN/Caddy can
  * serve it to operators' own frontends alongside the segments.
  */

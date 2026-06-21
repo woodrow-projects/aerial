@@ -20,7 +20,7 @@ switch — "going viral becomes a budget line, not a re-platform."
    (respect origin `Cache-Control` — Caddy already emits `no-cache` for `.m3u8`, immutable for segments), and
    returns a free **`<zone>.b-cdn.net`** hostname with **instant TLS and zero DNS**.
 4. Each channel's **HLS endpoint now resolves to the CDN** (`https://<zone>.b-cdn.net/hls/<slug>/live.m3u8`);
-   the **Icecast mount and DJ ingest stay origin-direct** (D2 hard rule — never CDN the persistent stream).
+   the **Icecast mount and streamer ingest stay origin-direct** (D2 hard rule — never CDN the persistent stream).
 5. Status: **provisioning → active**. Toggle **off** reverts endpoints to the origin immediately (pull zone
    left intact so existing embeds keep working).
 

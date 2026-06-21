@@ -8,7 +8,7 @@ The per-channel `.liq` script is **generated at runtime** from
 [`apps/control-plane/src/engine/liq-template.ts`](../../apps/control-plane/src/engine/liq-template.ts)
 and written under `LIQUIDSOAP_CONFIG_ROOT`. Each script:
 
-- runs a `fallback([live, loop])` with `track_sensitive=false` (instant DJ cutover)
+- runs a `fallback([live, loop])` with `track_sensitive=false` (instant streamer cutover)
   and an `mksafe` loop (the mount never drops),
 - authenticates the harbor source against the control plane (`/internal/auth`),
 - reports connect/disconnect to `/internal/status` and metadata to `/internal/metadata`,

@@ -104,7 +104,7 @@ export class ChannelsService {
   private endpoints(channel: Channel): ChannelEndpoints {
     const origin = env.publicBaseUrl;
     // HLS (and its sidecar nowplaying.json) resolve to the CDN when it's active,
-    // else the origin. Icecast + DJ ingest are ALWAYS origin-direct — never CDN the
+    // else the origin. Icecast + streamer ingest are ALWAYS origin-direct — never CDN the
     // persistent stream or the ingest path (ADR D2 hard rule, enforced here in code).
     const hlsBase = this.cdn.hlsBaseUrl();
     let ingestHost: string;

@@ -57,7 +57,7 @@ export interface ChannelEndpoints {
     mount: string; // /<slug>
     username: "source";
     protocol: "icecast";
-    tls: boolean; // TLS terminated at Caddy (ADR D10) — DJ client must enable TLS
+    tls: boolean; // TLS terminated at Caddy (ADR D10) — streamer client must enable TLS
   };
 }
 
@@ -72,7 +72,7 @@ export interface ChannelDto {
   mount: string;
   harborPort: number;
   endpoints: ChannelEndpoints;
-  live: boolean; // is a DJ currently connected (vs fallback loop)?
+  live: boolean; // is a streamer currently connected (vs fallback loop)?
   createdAt: string;
   updatedAt: string;
 }

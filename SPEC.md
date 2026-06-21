@@ -30,7 +30,7 @@ only when the audience justifies it.
 ## 3. Goals & non-goals
 
 **Goals (v1):** one-command self-host on a single VM; 2–5 channels per install (e.g. main + secondary, music
-+ talk); live DJ ingest with stream-key auth; HLS + origin-direct Icecast delivery; cacheable now-playing;
++ talk); live streamer ingest with stream-key auth; HLS + origin-direct Icecast delivery; cacheable now-playing;
 auto-TLS; opinionated control panel; listenable with **no CDN required**.
 
 **Explicit non-goals (v1):** Kubernetes/K3s/KEDA; any relay fleet (pods or tasks); AWS-native deployment; a
@@ -94,7 +94,9 @@ player is deferred.)
   `fallback()` chain; media library + upload; CDN auto-provisioning toggle (Bunny — see
   [`docs/plans/one-toggle-cdn.md`](./docs/plans/one-toggle-cdn.md)); cost-transparency / spend-cap dashboard;
   CDN-aware analytics.
-- **Scale + harden:** CDN-over-HLS as the lever; vertical NIC headroom first; optional self-run relay nodes;
+- **Scale + harden:** CDN-over-HLS as the lever; vertical NIC headroom first; **automated Icecast relay
+  provisioning + balancing** (one-command relay nodes — completes delivery coverage: HLS / CDN-HLS / single
+  Icecast / relayed Icecast — see [`docs/plans/icecast-relay-provisioning.md`](./docs/plans/icecast-relay-provisioning.md));
   warm-standby origin (HA); optional LL-HLS. *Future:* in-browser WebRTC "Go Live"; PaaS 1-click template; a
   hosted/SaaS tier from the same artifact.
 
@@ -106,6 +108,15 @@ player is deferred.)
 - **Pluggable "bring your own CDN"** — any origin-pull HTTP CDN works manually today; ship auto-provision
   adapters Bunny-first, then Gcore/CDN77/Cloudflare. Also support a DIY nginx/Varnish relay-node edge for
   operators who want max control / min bandwidth cost (see ADR D4).
+- **Operator SPA on shadcn/ui + Tailwind, TanStack Router/Query, sidebar shell** (ADR D15) — refactor the
+  current hand-CSS screens onto shared primitives; see
+  [`docs/plans/spa-ui-foundation.md`](./docs/plans/spa-ui-foundation.md). Branding/visual identity deferred
+  ([`docs/plans/spa-branding.md`](./docs/plans/spa-branding.md)).
+- **Interactive first-run setup** that creates the first **admin** (replaces the manual `seed:operator`) —
+  see [`docs/plans/interactive-setup.md`](./docs/plans/interactive-setup.md).
+- **User & role management + schedule-aware streamer auth** — Users hold a **role** (`admin` | `streamer`);
+  shows are owned by users; a streamer goes live with a per-user streamer key validated against their assigned
+  **live** show — see [`docs/plans/auto-dj-and-scheduling.md`](./docs/plans/auto-dj-and-scheduling.md).
 
 ## 9. Defaults & providers
 
@@ -124,6 +135,6 @@ CloudFront only if already AWS-locked.
   network). Run `pnpm test` (CI), `pnpm test:watch` (dev), `pnpm test:coverage`. Coverage is a per-change
   ratchet — new/changed lines covered, suite stays green — not a chase to 100%.
 - **Integration/e2e stays real and separate:** the docker-compose engine validation (real Liquidsoap 2.2.x +
-  Icecast, DJ ingest, HLS/Icecast output) is the integration layer and is **not** mocked into the unit suite.
+  Icecast, streamer ingest, HLS/Icecast output) is the integration layer and is **not** mocked into the unit suite.
 - **Backlog:** a CI workflow that runs `pnpm test` on every PR and blocks merge on red. Until then TDD is
   enforced by discipline and review.

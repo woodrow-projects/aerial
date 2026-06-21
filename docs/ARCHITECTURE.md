@@ -17,7 +17,7 @@ See [`ADRS.md`](./ADRS.md) for the decisions behind every component, and
 ```mermaid
 graph TD
     subgraph Internet
-        DJ["Live DJ<br/>(BUTT / Mixxx)"]
+        STREAMER["Live streamer<br/>(BUTT / Mixxx)"]
         L_HLS["Listeners (web/mobile)<br/>HLS"]
         L_LEG["Listeners (VLC/Sonos/car/TuneIn)<br/>Icecast"]
     end
@@ -46,7 +46,7 @@ graph TD
         VOL[/"HLS segments<br/>(shared volume)"/]
     end
 
-    DJ -->|TLS source + stream key| CADDY -->|harbor| LS1
+    STREAMER -->|TLS source + stream key| CADDY -->|harbor| LS1
     LS1 -->|HLS rendition set| VOL
     LS1 -->|Icecast mount| ICE
     LS2 -->|HLS| VOL
@@ -67,7 +67,7 @@ graph TD
 
 | Component | Role |
 |-----------|------|
-| **Caddy** | Single public entrypoint (custom image with the `caddy-l4` plugin). Automatic Let's Encrypt TLS; reverse-proxies the control plane; serves the HLS segment directory as the CDN origin; proxies the Icecast mounts; and **terminates DJ-ingest TLS at layer 4** (ports 8100–8110), proxying the decrypted source to the internal harbor. |
+| **Caddy** | Single public entrypoint (custom image with the `caddy-l4` plugin). Automatic Let's Encrypt TLS; reverse-proxies the control plane; serves the HLS segment directory as the CDN origin; proxies the Icecast mounts; and **terminates streamer-ingest TLS at layer 4** (ports 8100–8110), proxying the decrypted source to the internal harbor. |
 | **control-plane (NestJS/Fastify)** | The brain. Channel CRUD, operator auth, stream-key issuance/verification, per-channel Liquidsoap **config-gen + spawn/supervise**, the now-playing pump, CDN auto-provisioning (fast-follow), analytics + cost projection. Serves the built SPA. Exposes an OpenAPI-documented public API. |
 | **Engine Supervisor** | A control-plane module that generates each channel's `.liq` config and manages one Liquidsoap **child process per channel** with lifecycle hooks (start on boot, graceful drain on shutdown, restart on crash). |
 | **Liquidsoap (×N channels)** | Per channel: a `fallback([live, loop])` pipeline (instant cutover via `track_sensitive=false`, `mksafe` loop) emitting **two outputs** — an HLS rendition set + one Icecast mount. |
@@ -92,7 +92,7 @@ graph TD
 
 ## Key flows
 
-**Ingest + auth.** DJ points BUTT/Mixxx at the channel's TLS ingest URL (`host:8100+index`, TLS on) with
+**Ingest + auth.** The streamer points BUTT/Mixxx at the channel's TLS ingest URL (`host:8100+index`, TLS on) with
 `source` + the channel stream key → **Caddy terminates the TLS at layer 4** and proxies the decrypted
 Icecast source to the channel's internal Liquidsoap harbor → harbor `auth` hook calls the control plane
 `POST /internal/auth` → bcrypt + constant-time compare against the active hashed key → accept (200) or drop
@@ -119,7 +119,7 @@ TTL); Icecast listeners get inline ICY for free.
 aerial/
   apps/
     control-plane/      # NestJS (Fastify adapter): API + engine-supervisor module; serves built SPA
-    web/                # React + Vite + TS SPA (shadcn/Radix + Tailwind)
+    web/                # React + Vite + TS SPA (target: shadcn/Radix + Tailwind; current: plain CSS — ADR D15)
   packages/shared/      # shared TS types, zod schemas, generated API client/SDK
   engine/
     liquidsoap/         # templated .liq config-gen + Dockerfile (HLS + Icecast outputs, fallback/harbor)

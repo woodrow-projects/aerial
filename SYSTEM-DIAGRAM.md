@@ -21,7 +21,7 @@ For the reasoning behind each component see [`docs/ADRS.md`](./docs/ADRS.md); fo
 graph TD
     subgraph actors["External actors"]
         operator_browser["Operator browser<br/>(loads the SPA, drives the API)"]
-        dj_source_client["DJ / source client<br/>(BUTT, Mixxx)"]
+        streamer_source_client["Streamer / source client<br/>(BUTT, Mixxx)"]
         listener["End listeners<br/>(web/mobile HLS · VLC/Sonos/car Icecast)"]
     end
 
@@ -37,7 +37,7 @@ graph TD
     end
 
     subgraph engine["Audio engine — child processes inside control-plane"]
-        liquidsoap["Liquidsoap (1 per channel)<br/>harbor 8100+index · crossfade DJ vs mksafe fallback<br/>HLS + optional Icecast out"]
+        liquidsoap["Liquidsoap (1 per channel)<br/>harbor 8100+index · crossfade streamer vs mksafe fallback<br/>HLS + optional Icecast out"]
     end
 
     subgraph data["Persistent volumes"]
@@ -50,11 +50,11 @@ graph TD
 
     cdn["CDN — Bunny.net pull-zone<br/>OPTIONAL (only when an operator toggles it on)"]
 
-    %% --- listener / operator / DJ ingress (always-on) ---
+    %% --- listener / operator / streamer ingress (always-on) ---
     operator_browser -->|"HTTPS :443 — SPA + API (incl. /api/cdn)"| caddy
     listener -->|"HLS over HTTPS :443 — /hls/*"| caddy
     listener -->|"Icecast MP3 over HTTPS :443 — /icecast/*"| caddy
-    dj_source_client -->|"Icecast source over TLS :8100-8110"| caddy
+    streamer_source_client -->|"Icecast source over TLS :8100-8110"| caddy
 
     %% --- edge fan-out ---
     caddy -->|"reverse_proxy → :3000 (API + SPA)"| control_plane
@@ -98,7 +98,7 @@ graph TD
   operator pastes a Bunny.net API key and flips the toggle on; until then listeners are served straight from
   the Caddy HLS origin.
 - **Groups:** *External actors* live outside the deployment; the **public edge** (Caddy) is the **only
-  published container** (80/443 + DJ ingest 8100-8110); everything in *Backend*, *Engine* and *Volumes* is
+  published container** (80/443 + streamer ingest 8100-8110); everything in *Backend*, *Engine* and *Volumes* is
   internal-only on the Docker Compose network.
 - **Per-channel fan-out:** the single `Liquidsoap (1 per channel)` node represents *N* identical child
   processes — control-plane spawns one per channel, each binding harbor port `HARBOR_BASE_PORT (8100) +
@@ -112,12 +112,12 @@ graph TD
 | Component | Type | Responsibility | Source |
 |---|---|---|---|
 | Operator browser | External actor | Loads the SPA and drives the control-plane API over HTTPS (channel CRUD, auth/session, now-playing, the one-toggle CDN controls). | *(external)* — consumes [`apps/web/`](./apps/web) |
-| DJ / source client (BUTT, Mixxx) | External actor | Pushes a live Icecast source stream over TLS to a per-channel ingest port (8100-8110); stream key checked via the `/internal` hook. | *(external)* — auth at [`apps/control-plane/src/internal/`](./apps/control-plane/src/internal) |
+| Streamer / source client (BUTT, Mixxx) | External actor | Pushes a live Icecast source stream over TLS to a per-channel ingest port (8100-8110); stream key checked via the `/internal` hook. | *(external)* — auth at [`apps/control-plane/src/internal/`](./apps/control-plane/src/internal) |
 | End listeners | External actor | Consume HLS playlists/segments (`/hls/*`) or origin-direct Icecast MP3 mounts (`/icecast/*`) over HTTPS. | *(external)* |
-| Caddy | Public edge | Only published container: auto-TLS, `file_server`s HLS as a cacheable origin, reverse-proxies SPA/API and Icecast, and layer4-TLS-terminates DJ ingest. Publishes 80/443 + 8100-8110. | [`deploy/caddy/Caddyfile`](./deploy/caddy/Caddyfile), [`deploy/caddy/Dockerfile`](./deploy/caddy/Dockerfile) |
+| Caddy | Public edge | Only published container: auto-TLS, `file_server`s HLS as a cacheable origin, reverse-proxies SPA/API and Icecast, and layer4-TLS-terminates streamer ingest. Publishes 80/443 + 8100-8110. | [`deploy/caddy/Caddyfile`](./deploy/caddy/Caddyfile), [`deploy/caddy/Dockerfile`](./deploy/caddy/Dockerfile) |
 | control-plane | Service (backend) | NestJS API + SPA host on :3000; runs `prisma migrate deploy` on start; supervises one Liquidsoap child per channel with restart/backoff; hosts the one-toggle CDN state machine. Image bundles Node + Liquidsoap + ffmpeg. | [`apps/control-plane/src/`](./apps/control-plane/src) (`main.ts`, `app.module.ts`, `engine/`, `cdn/`) |
 | React/Vite SPA | Frontend | Operator UI for channels, auth, now-playing and the CDN toggle; built and baked into the control-plane image (served on `:3000`). | [`apps/web/src/`](./apps/web/src) (`App.tsx`, `api.ts`, `auth-client.ts`) |
-| Liquidsoap (1 per channel) | Child process (engine) | Per-channel engine spawned inside control-plane: binds harbor `8100+index`, crossfades live DJ vs the `mksafe` fallback, writes the HLS rendition set to `/srv/hls`, optionally pushes an Icecast MP3 source, and calls the `/internal` hooks. | [`apps/control-plane/src/engine/`](./apps/control-plane/src/engine) (`liq-template.ts`, `engine.service.ts`) |
+| Liquidsoap (1 per channel) | Child process (engine) | Per-channel engine spawned inside control-plane: binds harbor `8100+index`, crossfades the live streamer vs the `mksafe` fallback, writes the HLS rendition set to `/srv/hls`, optionally pushes an Icecast MP3 source, and calls the `/internal` hooks. | [`apps/control-plane/src/engine/`](./apps/control-plane/src/engine) (`liq-template.ts`, `engine.service.ts`) |
 | Icecast | Service (engine) | Hosts all channel MP3 mountpoints (created when Liquidsoap connects as source); `expose 8000` only, reachable solely via Caddy `/icecast/*`. | [`engine/icecast/`](./engine/icecast) |
 | Postgres 16 | Datastore | Stores channels, stream keys, operators/sessions and the singleton `CdnConfig` row; internal-only `:5432`; `pg_isready` healthcheck gates control-plane start. | [`apps/control-plane/prisma/schema.prisma`](./apps/control-plane/prisma/schema.prisma), [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
 | hls volume | Volume | Shared HLS output: written by Liquidsoap (and `nowplaying.json` by control-plane) at `/srv/hls`, mounted read-only into Caddy as the origin. | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
@@ -145,3 +145,11 @@ on `main` today (per SPEC §3 non-goals and `docs/ADRS.md`):
 - **Extra CDN provider adapters (Gcore / CDN77 / Cloudflare)** — backlog; only the Bunny adapter exists.
 - **Social/SSO login (Google/GitHub)** — env-gated off in v1.
 - **Multi-tenant SaaS / hosted tier** — out of scope; single-operator only.
+- **Multiple user accounts & roles within one install (admin/streamer) + per-user streamer keys + scheduling**
+  — *planned*; today is a single operator, channel-scoped stream keys, and no scheduler — see
+  [`docs/plans/auto-dj-and-scheduling.md`](./docs/plans/auto-dj-and-scheduling.md). (Still single-install, not
+  multi-tenant.)
+- **Automated Icecast relay nodes (multi-VM)** — *planned* (Scale + harden); the relay path is configured
+  (`relay-password` set) but unautomated and single-VM today — see
+  [`docs/plans/icecast-relay-provisioning.md`](./docs/plans/icecast-relay-provisioning.md). Distinct from the
+  rejected K8s/ECS relay *fleet* above.

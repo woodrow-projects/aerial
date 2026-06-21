@@ -57,7 +57,7 @@ pnpm --filter @aerial/web dev                # :5173  (proxies /api → :3000)
 
 ## Verifying the vertical slice
 
-1. Create a channel in the SPA; copy its **DJ ingest** host/port/mount and create a **stream key**.
+1. Create a channel in the SPA; copy its **streamer ingest** host/port/mount and create a **stream key**.
 2. In BUTT/Mixxx: server = ingest host, port = ingest port, mount = `/<slug>`,
    user = `source`, password = the stream key, format = MP3/OGG, **TLS/SSL = on**
    (ingest is TLS-terminated at Caddy — D10). Connect.
@@ -68,6 +68,10 @@ pnpm --filter @aerial/web dev                # :5173  (proxies /api → :3000)
 ## Operator auth (better-auth)
 
 The `/api/*` surface requires an operator session (ADR D13). Setup:
+
+> **Planned:** the manual `seed:operator` step below is slated to be replaced by an interactive first-run that
+> creates the first **admin** user (and the role model admin/streamer) — see
+> [`plans/interactive-setup.md`](./plans/interactive-setup.md).
 
 1. Set `BETTER_AUTH_SECRET` (>=32 chars: `openssl rand -base64 32`) in `.env`.
 2. Bring the stack up, then **seed the first operator** while signup is open:
@@ -93,10 +97,10 @@ Icecast 2.4) via `docker compose up`:
 
 - Channel create → engine spawns one Liquidsoap process → adaptive **HLS** (HE-AAC 64k
   + AAC-LC 128k via `%ffmpeg`) **and** an **Icecast** MP3 mount, both served through Caddy.
-- **DJ ingest** (Icecast source protocol) → bcrypt **stream-key auth** gates it →
+- **streamer ingest** (Icecast source protocol) → bcrypt **stream-key auth** gates it →
   `fallback()` **crossfades** loop→live (`live:true`); disconnect crossfades back
   (`live:false`). A wrong key is rejected (TCP dropped).
-- **DJ-ingest TLS** (D10): Caddy (custom image with the `caddy-l4` plugin) terminates
+- **streamer-ingest TLS** (D10): Caddy (custom image with the `caddy-l4` plugin) terminates
   TLS on the ingest ports (8100–8110) reusing its managed cert, and proxies the
   decrypted source to the internal harbor. Verified: a TLS source authenticates and
   goes live; a **plaintext** source to the public port is dropped; harbor ports are
@@ -117,7 +121,7 @@ base `liquidsoap` entrypoint reset.
 ## Remaining caveats (before production)
 
 - **Ingest source IP**: because Caddy terminates ingest TLS at layer 4, the harbor sees
-  Caddy's IP, not the DJ's, so `StreamSession.sourceIp` logs Caddy. Preserving the real
+  Caddy's IP, not the streamer's, so `StreamSession.sourceIp` logs Caddy. Preserving the real
   IP needs PROXY-protocol support on both ends (caddy-l4 `proxy_protocol` + a harbor that
   parses it) — a later enhancement.
 - **Local-dev ingest TLS** needs a cert: run with `SITE_ADDRESS=localhost` (Caddy internal

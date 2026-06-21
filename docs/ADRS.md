@@ -16,7 +16,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D4  | Provider chosen by egress model; Hetzner default, Bunny CDN default | Accepted |
 | D5  | Control plane: NestJS (Fastify adapter) + React/Vite/TS SPA, one container for v1 | Accepted |
 | D6  | One Liquidsoap process per channel, spawned dynamically | Accepted |
-| D7  | Live DJ ingest via desktop source software first (BUTT/Mixxx); WebRTC later | Accepted |
+| D7  | Live streamer ingest via desktop source software first (BUTT/Mixxx); WebRTC later | Accepted |
 | D8  | Metadata via a cacheable `nowplaying.json` side-channel + ICY for Icecast | Accepted |
 | D9  | Public surface: endpoints + metadata API only (no listen page in v1) | Accepted |
 | D10 | Security baseline (hashed keys, TLS, operator accounts, kill switch) | Accepted |
@@ -24,6 +24,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D12 | Opinionated defaults ON (R128 loudness, gapless, auto-TLS, sane bitrates) | Accepted |
 | D13 | Operator auth via better-auth (rejected OpenAuth) | Accepted |
 | D14 | Test-Driven Development is mandatory (Vitest; test-first) | Accepted |
+| D15 | SPA UI built on shadcn/ui (Radix + Tailwind), TanStack Router/Query | Accepted |
 
 ---
 
@@ -143,7 +144,7 @@ needed.
 
 ---
 
-## D7 — Live DJ ingest via desktop source software first
+## D7 — Live streamer ingest via desktop source software first
 
 **Decision.** v1 ingest is **desktop Icecast source software (BUTT/Mixxx)** with copy-paste presets +
 downloadable config, authenticated by per-channel stream key. **In-browser WebRTC "Go Live"** is a future
@@ -183,7 +184,7 @@ minimal embeddable player is deferred.
   user-chosen, never plaintext.
 - All secrets live in **git-ignored env**, never in repo config XML.
 - **TLS mandatory** (Caddy + automatic Let's Encrypt) on the listener and control-plane endpoints; raw
-  Icecast/source ports sit behind the TLS terminator. *Implemented:* DJ ingest is TLS-terminated by Caddy via
+  Icecast/source ports sit behind the TLS terminator. *Implemented:* streamer ingest is TLS-terminated by Caddy via
   the `caddy-l4` layer4 plugin (the harbor ports are internal-only); see `ARCHITECTURE.md`.
 - Add an **operator account** model (`users`) for the control panel (the original spec had no human/owner
   concept).
@@ -264,7 +265,7 @@ audio-delivery architecture, but it shipped **zero automated tests**. The core c
 - **Coverage is a ratchet, not a gate-to-100.** New/changed lines must be covered; the suite must stay
   green. Wiring-only files (`*.module.ts`, `main.ts`) are excluded — they carry no logic worth a unit test.
 - **Integration/e2e stays real and separate.** The docker-compose engine validation (real Liquidsoap +
-  Icecast, DJ ingest, HLS/Icecast output) remains the integration layer and is **not** mocked into the unit
+  Icecast, streamer ingest, HLS/Icecast output) remains the integration layer and is **not** mocked into the unit
   suite; it is run/automated separately (backlog: wire it into CI).
 - **Bug fixes start with a failing regression test** that reproduces the bug before the fix.
 
@@ -288,3 +289,28 @@ contract to be stated before the implementation biases it, and guarantees the te
 verification). `vitest` + `@vitest/coverage-v8` are dev dependencies; `turbo run test` already fans the
 `test` script across the workspace. **Backlog:** a CI workflow (`.github/workflows`) that runs `pnpm test`
 on every PR and blocks merge on red — until then, TDD is enforced by discipline and review.
+
+## D15 — SPA UI built on shadcn/ui (Radix + Tailwind)
+
+**Context.** The operator SPA shipped as plain React with a single hand-written 251-line `styles.css` and all
+components inline in `App.tsx` — no component library, no design system, no accessibility baseline.
+`docs/ARCHITECTURE.md` already *names* "shadcn/Radix + Tailwind" as the intended stack, but it was never
+actually adopted. As the panel grows (user management, schedule calendar, more channel controls), bespoke CSS
+per component scales poorly and inconsistently.
+
+**Decision.** Standardize the SPA on **shadcn/ui primitives** — Radix UI under the hood, Tailwind for
+styling, `class-variance-authority` for variants. **Refactor the existing screens onto shadcn**, and build
+**all new UI** from shadcn primitives by default. Routing is **TanStack Router** and server state is
+**TanStack Query** (see [`docs/plans/spa-ui-foundation.md`](./plans/spa-ui-foundation.md)).
+
+**Rationale.** shadcn gives an accessible, composable, *ownable* component set (the code is vendored into the
+repo, not a black-box dependency), themed via Tailwind tokens so deferred brand work
+([`docs/plans/spa-branding.md`](./plans/spa-branding.md)) drops in cleanly. It realizes the
+opinionated-modern-UX differentiator (D12, SPEC §7) at low cost and makes new feature screens fast and
+consistent.
+
+**Rejected.**
+- *Keep hand-rolled CSS:* already inconsistent, no a11y baseline, and every new screen re-solves layout/state.
+- *A batteries-included kit (MUI/Chakra):* heavier runtime, opinionated styling that's harder to theme to a
+  custom brand, and a black-box dependency vs vendored, editable components.
+- *Headless-only (Radix/Headless UI alone):* rebuilds the variant/styling layer shadcn already provides.

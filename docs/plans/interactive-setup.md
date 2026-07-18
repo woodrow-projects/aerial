@@ -1,31 +1,52 @@
 # Plan: Interactive first-run setup (create the first admin)
 
-> **Status: planned.** Replace the manual, error-prone `seed:operator` dance with an interactive first-run
-> that creates the first **admin** user. Today setup is three manual steps and easy to get wrong.
+> **Status: implemented (CLI path).** `./deploy/install.sh` is now an interactive, single-command first-run
+> that scaffolds `.env` with strong secrets, prompts for the domain/email and the first **admin**, brings the
+> stack up, and creates that admin. Sign-up is **self-locking**, so the old `AUTH_DISABLE_SIGNUP` flip +
+> redeploy dance (and its open-registration window) is gone.
 
-## Today (the friction)
+## What shipped
 
-`deploy/install.sh` scaffolds `.env`, generates secrets, and runs `docker compose up -d` — then **stops**.
-The operator must separately run `docker compose exec … control-plane pnpm seed:operator` with
-`OPERATOR_EMAIL`/`OPERATOR_PASSWORD` env vars (see `apps/control-plane/src/auth/seed-operator.ts`), then set
-`AUTH_DISABLE_SIGNUP=true` and redeploy to lock public registration. Three steps, manual env juggling, and a
-window where signup is open.
+- **One interactive run.** `install.sh` shows the Aerial banner, checks Docker, then asks (via `/dev/tty`, so
+  it works under `bash <(curl …)`): database mode, site address, ACME email, public base URL, and the first
+  admin (name/email/password, confirmed, min 8 chars). All answers can be supplied as env vars for
+  unattended/CI runs.
+- **Managed or external Postgres.** The installer asks `managed` (Aerial runs Postgres via the `managed-db`
+  compose profile) or `external` (bring your own). External prompts for host/port/db/user/password/SSL mode,
+  builds a URL-encoded `DATABASE_URL`, starts **no** Postgres container, and never alters your credentials —
+  `migrate deploy` is additive, so it safely **adopts** an existing Aerial DB. The `postgres` service is gated
+  behind `profiles: ["managed-db"]` and `control-plane.depends_on.postgres` is `required: false`, so external
+  mode runs without it.
+- **No forced wipes.** For managed Postgres the installer reconciles the role password to `.env` in place
+  (idempotent no-op on a fresh volume; non-destructive `ALTER USER` over the image's local-socket trust auth if
+  an older volume's password drifted). A wipe is only ever an explicit opt-in (`AERIAL_WIPE_EXISTING=1`), never
+  required to recover.
+- **All secrets generated.** Previously `install.sh` left `BETTER_AUTH_SECRET` and `INTERNAL_API_TOKEN` as
+  placeholders (insecure-by-default); the installer now generates both alongside the DB/Icecast/`APP_SECRET`.
+- **Self-locking sign-up.** A better-auth `databaseHooks.user.create.before` gate
+  (`apps/control-plane/src/auth/first-run.ts`) makes the first account (empty `user` table) the **admin** and
+  returns `403` for any later sign-up — across email *and* social. The lock is DB-state-driven, not env-driven.
+- **First-admin seed.** `seed-operator.ts` was refactored to a testable `seedOperator(input, deps)` with
+  `created | exists | invalid | error` outcomes (idempotent: a re-run reports `exists`). The installer invokes
+  it server-side via `docker compose exec … node dist/auth/seed-operator.js` — no public sign-up window.
+- **Role column.** `User.role` (`admin | streamer`, default `streamer`) added (migration
+  `20260621000000_add_user_role`). Guard-level RBAC enforcement is **not** part of this work — it lands with
+  Auto-DJ/scheduling (see [`auto-dj-and-scheduling.md`](./auto-dj-and-scheduling.md)).
 
-## Direction
+## Why CLI, not the web wizard
 
-One guided flow that ends with a working admin login and signup locked. Approaches to weigh:
-
-- **First-run web wizard (explore first).** When the `user` table is empty, the SPA shows a one-time "create
-  the first admin" screen; on submit it creates the admin and flips the system into signup-closed
-  automatically — no `AUTH_DISABLE_SIGNUP` toggle dance, no shell `exec`. Pairs with the role model
-  (admin/streamer — see [`auto-dj-and-scheduling.md`](./auto-dj-and-scheduling.md)).
-- **`install.sh` CLI prompt.** The installer prompts for admin name/email/password and seeds before/right
-  after `up`, then sets `AUTH_DISABLE_SIGNUP=true`.
+This plan originally flagged the **web wizard** as "explore first". We chose the **`install.sh` CLI prompt**
+instead because the operator's entry point is already a terminal (`install.sh`), so the first admin can be
+created in the same one-command flow with no extra page, no "is the user table empty?" public endpoint, and no
+post-signup session-refresh edge case in the SPA. The self-locking gate gives the wizard's main benefit
+(no toggle dance, no open window) regardless of how the admin is created. A web wizard remains possible later
+as an *alternative* entry point — it would reuse the same `firstRunCreateGate` — but is not needed now.
 
 ## Anchors
 
-- `deploy/install.sh`, `apps/control-plane/src/auth/seed-operator.ts`, `auth.ts` (`disableSignUp`),
-  `config/env.ts` (`AUTH_DISABLE_SIGNUP`).
+- `deploy/install.sh` (interactive installer), `apps/control-plane/src/auth/first-run.ts` (the gate),
+  `apps/control-plane/src/auth/seed-operator.ts` (seeder), `auth.ts` (`databaseHooks` + `user.additionalFields`),
+  `config/env.ts` (`AUTH_DISABLE_SIGNUP`, now an optional override).
 
 Cross-ref: ADR D13 (operator auth via better-auth); role model in
 [`auto-dj-and-scheduling.md`](./auto-dj-and-scheduling.md).

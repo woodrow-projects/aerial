@@ -3,6 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { PrismaClient } from "@prisma/client";
 import { env } from "../config/env";
 import { buildSocialProviders } from "./social-providers";
+import { firstRunCreateGate, STREAMER_ROLE } from "./first-run";
 
 /**
  * The better-auth instance (operator auth — ADR: chosen over OpenAuth for an
@@ -24,6 +25,22 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
   emailAndPassword: { enabled: true, disableSignUp: env.auth.disableSignUp },
   socialProviders: buildSocialProviders(),
+  // `role` is server-assigned only (input:false) — clients can't set it at
+  // sign-up. The first-run hook below promotes the first account to admin.
+  user: {
+    additionalFields: {
+      role: { type: "string", required: false, input: false, defaultValue: STREAMER_ROLE },
+    },
+  },
+  // Self-locking sign-up: first account → admin; any later attempt → 403.
+  // Replaces the AUTH_DISABLE_SIGNUP flip + redeploy (no open window).
+  databaseHooks: {
+    user: {
+      create: {
+        before: (user) => firstRunCreateGate(user, () => prisma.user.count()),
+      },
+    },
+  },
   trustedOrigins: [...env.auth.trustedOrigins],
   advanced: {
     // Caddy terminates TLS; the container sees plain http. Force Secure cookies

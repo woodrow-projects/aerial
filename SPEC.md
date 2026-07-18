@@ -112,8 +112,9 @@ player is deferred.)
   current hand-CSS screens onto shared primitives; see
   [`docs/plans/spa-ui-foundation.md`](./docs/plans/spa-ui-foundation.md). Branding/visual identity deferred
   ([`docs/plans/spa-branding.md`](./docs/plans/spa-branding.md)).
-- **Interactive first-run setup** that creates the first **admin** (replaces the manual `seed:operator`) —
-  see [`docs/plans/interactive-setup.md`](./docs/plans/interactive-setup.md).
+- **Interactive first-run setup** ✅ *shipped* — `./deploy/install.sh` creates the first **admin** in one
+  interactive run; sign-up self-locks afterwards (replaces the manual `seed:operator` + `AUTH_DISABLE_SIGNUP`
+  dance). See [`docs/plans/interactive-setup.md`](./docs/plans/interactive-setup.md).
 - **User & role management + schedule-aware streamer auth** — Users hold a **role** (`admin` | `streamer`);
   shows are owned by users; a streamer goes live with a per-user streamer key validated against their assigned
   **live** show — see [`docs/plans/auto-dj-and-scheduling.md`](./docs/plans/auto-dj-and-scheduling.md).

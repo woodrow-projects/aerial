@@ -7,6 +7,10 @@ name: aerial
 services:
   postgres:
     image: postgres:16-alpine
+    # Optional: only started for an Aerial-managed database. With an external
+    # Postgres the installer sets DB_MODE=external and this service stays off
+    # (the managed-db profile is not activated). See deploy/install.sh.
+    profiles: ["managed-db"]
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -48,8 +52,12 @@ services:
       HLS_ROOT: /srv/hls
       MEDIA_ROOT: /srv/media
     depends_on:
+      # required:false → in external-DB mode (postgres service off) the control
+      # plane still starts and connects to DATABASE_URL; in managed mode it
+      # waits for the local Postgres to be healthy first.
       postgres:
         condition: service_healthy
+        required: false
       icecast:
         condition: service_started
     volumes:
@@ -62,7 +70,7 @@ services:
 
   caddy:
     # Public entrypoint: auto-TLS, serves HLS segments (CDN origin), proxies
-    # Icecast + the control plane, and TLS-terminates DJ ingest via layer4 (D10/D11).
+    # Icecast + the control plane, and TLS-terminates streamer ingest via layer4 (D10/D11).
     build:
       context: ./caddy
     restart: unless-stopped
@@ -72,7 +80,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      # DJ ingest (TLS-terminated here, proxied to the internal harbors)
+      # Streamer ingest (TLS-terminated here, proxied to the internal harbors)
       - "8100-8110:8100-8110"
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro

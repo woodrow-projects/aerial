@@ -1,30 +1,79 @@
 import { auth } from "./auth";
 
 /**
- * One-off: create the first operator account. Run once after the first deploy
- * WHILE AUTH_DISABLE_SIGNUP is unset/false:
- *   docker compose exec control-plane node dist/auth/seed-operator.js
- * with OPERATOR_EMAIL / OPERATOR_PASSWORD (/ OPERATOR_NAME) set. Then set
- * AUTH_DISABLE_SIGNUP=true and redeploy to lock public registration.
+ * Create the first admin account, server-side. Invoked by the installer
+ * (`deploy/install.sh`) via `docker compose exec … node dist/auth/seed-operator.js`
+ * with OPERATOR_EMAIL / OPERATOR_PASSWORD (/ OPERATOR_NAME) set.
+ *
+ * Sign-up self-locks after the first account (see `first-run.ts`), so this is
+ * idempotent: a second run against a seeded box reports `exists`, not an error.
  */
-async function main(): Promise<void> {
-  const email = process.env.OPERATOR_EMAIL;
-  const password = process.env.OPERATOR_PASSWORD;
-  const name = process.env.OPERATOR_NAME ?? "Operator";
+export type SeedOperatorOutcome = "created" | "exists" | "invalid" | "error";
+
+export interface SeedOperatorResult {
+  outcome: SeedOperatorOutcome;
+  message: string;
+}
+
+export interface SeedOperatorInput {
+  email?: string;
+  password?: string;
+  name?: string;
+}
+
+export interface SeedOperatorDeps {
+  signUp: (body: { email: string; password: string; name: string }) => Promise<unknown>;
+}
+
+const defaultDeps: SeedOperatorDeps = {
+  signUp: (body) => auth.api.signUpEmail({ body }),
+};
+
+/** The first-run gate rejects with FORBIDDEN once an admin exists; better-auth
+ * uses a "already exists" message for a duplicate email. Both mean "done". */
+function isAlreadyDone(message: string): boolean {
+  return /closed|already exists|exist/i.test(message);
+}
+
+export async function seedOperator(
+  input: SeedOperatorInput,
+  deps: SeedOperatorDeps = defaultDeps,
+): Promise<SeedOperatorResult> {
+  const email = input.email?.trim();
+  const password = input.password;
+  const name = input.name?.trim() || "Operator";
 
   if (!email || !password) {
-    console.error("Set OPERATOR_EMAIL and OPERATOR_PASSWORD to seed the first operator.");
-    process.exit(1);
+    return {
+      outcome: "invalid",
+      message: "Set OPERATOR_EMAIL and OPERATOR_PASSWORD to create the first admin.",
+    };
   }
 
   try {
-    await auth.api.signUpEmail({ body: { email, password, name } });
-    console.log(`Seeded operator: ${email}`);
-    process.exit(0);
+    await deps.signUp({ email, password, name });
+    return { outcome: "created", message: `Created admin: ${email}` };
   } catch (err) {
-    console.error("Failed to seed operator:", err instanceof Error ? err.message : err);
-    process.exit(1);
+    const message = err instanceof Error ? err.message : String(err);
+    if (isAlreadyDone(message)) {
+      return { outcome: "exists", message: "An admin already exists — sign-up is locked." };
+    }
+    return { outcome: "error", message: `Failed to create admin: ${message}` };
   }
 }
 
-void main();
+/** CLI entrypoint — only when run directly, never on import (so tests don't exit). */
+async function main(): Promise<void> {
+  const result = await seedOperator({
+    email: process.env.OPERATOR_EMAIL,
+    password: process.env.OPERATOR_PASSWORD,
+    name: process.env.OPERATOR_NAME,
+  });
+  const ok = result.outcome === "created" || result.outcome === "exists";
+  (ok ? console.log : console.error)(result.message);
+  process.exit(ok ? 0 : 1);
+}
+
+if (require.main === module) {
+  void main();
+}

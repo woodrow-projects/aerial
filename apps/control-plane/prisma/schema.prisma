@@ -106,6 +106,9 @@ model User {
   email         String
   emailVerified Boolean   @default(false)
   image         String?
+  // Operator role. The first account (created at first-run) becomes "admin"
+  // (see auth/first-run.ts); RBAC enforcement lands with Auto-DJ/scheduling.
+  role          String    @default("streamer")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   sessions      Session[]

@@ -20,13 +20,40 @@ Monorepo: **pnpm workspaces + Turborepo**. Packages:
 
 ## Quick start (Docker — the supported path)
 
+One interactive command does everything — picks your database, scaffolds `.env`
+with strong secrets, asks for your domain/email and the **first admin**, builds
+and starts the stack, and creates that admin:
+
 ```bash
-cp .env.example .env
-# set SITE_ADDRESS, ACME_EMAIL, PUBLIC_BASE_URL; install.sh generates secrets
-./deploy/install.sh            # first run scaffolds .env, then re-run to launch
-# or directly:
-docker compose -f deploy/docker-compose.yml --env-file .env up -d --build
+./deploy/install.sh
 ```
+
+It first asks how you want Postgres:
+
+- **managed** — Aerial runs Postgres in a container for you (the `managed-db`
+  compose profile). The installer generates the password and, on every run,
+  reconciles the role password to `.env` in place — so a regenerated `.env` or a
+  restored box **never requires wiping the database**.
+- **external** — bring your own / a managed Postgres. You're prompted for
+  host/port/db/user/password/SSL mode; no Postgres container is started and your
+  credentials are never altered. Migrations are additive, so this safely
+  **adopts** an existing Aerial database (the first admin is seeded only if the
+  user table is empty).
+
+Re-running is safe: with a `.env` already present it just (re)builds and brings
+the stack up — it won't regenerate secrets or re-prompt. For CI / unattended
+installs, export the answers first and the script won't prompt:
+
+```bash
+DB_MODE=managed SITE_ADDRESS=radio.example.com ACME_EMAIL=you@example.com \
+PUBLIC_BASE_URL=https://radio.example.com \
+ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='strong-pw' ADMIN_NAME='You' \
+./deploy/install.sh
+# external DB: DB_MODE=external plus DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD/DB_SSLMODE
+```
+
+`AERIAL_WIPE_EXISTING=1 ./deploy/install.sh` removes the previous stack + volumes
+first (opt-in clean slate — never required to recover).
 
 Open the control panel at `https://$SITE_ADDRESS` (or `http://localhost` with
 `SITE_ADDRESS=:80`). API docs at `/api/docs`.
@@ -37,8 +64,8 @@ Open the control panel at `https://$SITE_ADDRESS` (or `http://localhost` with
 pnpm install
 pnpm --filter @aerial/shared build          # other packages import its dist
 
-# bring up just Postgres + Icecast
-docker compose -f deploy/docker-compose.yml up -d postgres icecast
+# bring up just Postgres + Icecast (postgres is behind the managed-db profile)
+docker compose -f deploy/docker-compose.yml --profile managed-db up -d postgres icecast
 
 # point the API at them (export or use a root .env loaded into your shell)
 export DATABASE_URL=postgresql://aerial:<pw>@localhost:5432/aerial?schema=public
@@ -67,22 +94,25 @@ pnpm --filter @aerial/web dev                # :5173  (proxies /api → :3000)
 
 ## Operator auth (better-auth)
 
-The `/api/*` surface requires an operator session (ADR D13). Setup:
+The `/api/*` surface requires an operator session (ADR D13).
 
-> **Planned:** the manual `seed:operator` step below is slated to be replaced by an interactive first-run that
-> creates the first **admin** user (and the role model admin/streamer) — see
-> [`plans/interactive-setup.md`](./plans/interactive-setup.md).
+**First admin & self-locking sign-up.** `./deploy/install.sh` creates the first admin for you (it generates
+`BETTER_AUTH_SECRET` and seeds the account via `dist/auth/seed-operator.js`). Sign-up is **self-locking**:
+the first account created against an empty `user` table becomes the **admin** (role assigned in
+`src/auth/first-run.ts`); once any user exists, sign-up returns `403` automatically — no `AUTH_DISABLE_SIGNUP`
+flip, no redeploy, no window where registration is open. `AUTH_DISABLE_SIGNUP=true` remains an optional hard
+override that disables the email sign-up path entirely.
 
-1. Set `BETTER_AUTH_SECRET` (>=32 chars: `openssl rand -base64 32`) in `.env`.
-2. Bring the stack up, then **seed the first operator** while signup is open:
-   ```bash
-   docker compose -f deploy/docker-compose.yml exec \
-     -e OPERATOR_EMAIL=you@example.com -e OPERATOR_PASSWORD='strong-pw' \
-     control-plane pnpm seed:operator
-   ```
-   (or just sign up once via the login page).
-3. Set `AUTH_DISABLE_SIGNUP=true` and redeploy to lock public registration.
-4. **Social login** (optional): set `GOOGLE_CLIENT_ID/SECRET` and/or `GITHUB_CLIENT_ID/SECRET`, register the
+If you ever need to seed manually (e.g. the installer's admin step was skipped), the same path is available —
+or just open the panel and sign up once (the first sign-up wins, then locks):
+
+```bash
+docker compose -f deploy/docker-compose.yml exec \
+  -e OPERATOR_EMAIL=you@example.com -e OPERATOR_PASSWORD='strong-pw' -e OPERATOR_NAME='You' \
+  control-plane node dist/auth/seed-operator.js
+```
+
+**Social login** (optional): set `GOOGLE_CLIENT_ID/SECRET` and/or `GITHUB_CLIENT_ID/SECRET`, register the
    redirect URI `<PUBLIC_BASE_URL>/api/auth/callback/<provider>`, and rebuild the SPA with
    `VITE_GOOGLE_ENABLED=1` / `VITE_GITHUB_ENABLED=1` to show the buttons.
 

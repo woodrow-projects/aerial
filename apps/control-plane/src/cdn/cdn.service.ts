@@ -4,6 +4,7 @@ import type { CdnConfigDto } from "@aerial/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { env } from "../config/env";
 import { decryptSecret, encryptSecret } from "../common/crypto";
+import { parseCdnProvider, parseCdnStatus } from "../prisma/db-columns";
 import { CDN_PROVIDER, type CdnProviderAdapter } from "./provider";
 
 const SINGLETON_ID = 1;
@@ -141,8 +142,8 @@ export class CdnService implements OnModuleInit {
 
   private toDto(cfg: CdnConfig): CdnConfigDto {
     return {
-      provider: cfg.provider,
-      status: cfg.status,
+      provider: parseCdnProvider(cfg.provider),
+      status: parseCdnStatus(cfg.status),
       hasApiKey: cfg.apiKeyEnc != null,
       cdnHostname: cfg.cdnHostname,
       errorMessage: cfg.errorMessage,

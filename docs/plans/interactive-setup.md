@@ -8,18 +8,13 @@
 ## What shipped
 
 - **One interactive run.** `install.sh` shows the Aerial banner, checks Docker, then asks (via `/dev/tty`, so
-  it works under `bash <(curl …)`): database mode, site address, ACME email, public base URL, and the first
+  it works under `bash <(curl …)`): site address, ACME email, public base URL, and the first
   admin (name/email/password, confirmed, min 8 chars). All answers can be supplied as env vars for
   unattended/CI runs.
-- **Managed or external Postgres.** The installer asks `managed` (Aerial runs Postgres via the `managed-db`
-  compose profile) or `external` (bring your own). External prompts for host/port/db/user/password/SSL mode,
-  builds a URL-encoded `DATABASE_URL`, starts **no** Postgres container, and never alters your credentials —
-  `migrate deploy` is additive, so it safely **adopts** an existing Aerial DB. The `postgres` service is gated
-  behind `profiles: ["managed-db"]` and `control-plane.depends_on.postgres` is `required: false`, so external
-  mode runs without it.
-- **No forced wipes.** For managed Postgres the installer reconciles the role password to `.env` in place
-  (idempotent no-op on a fresh volume; non-destructive `ALTER USER` over the image's local-socket trust auth if
-  an older volume's password drifted). A wipe is only ever an explicit opt-in (`AERIAL_WIPE_EXISTING=1`), never
+- **Zero database setup.** State is a single SQLite file on the `data` volume (`DATABASE_URL=file:/srv/data/aerial.db`
+  — ADR D11, amended 2026-07-17; the original managed/external-Postgres flow was removed with it).
+  `migrate deploy` is additive, so re-installing over an existing volume safely **adopts** the existing DB.
+- **No forced wipes.** A wipe is only ever an explicit opt-in (`AERIAL_WIPE_EXISTING=1`), never
   required to recover.
 - **All secrets generated.** Previously `install.sh` left `BETTER_AUTH_SECRET` and `INTERNAL_API_TOKEN` as
   placeholders (insecure-by-default); the installer now generates both alongside the DB/Icecast/`APP_SECRET`.

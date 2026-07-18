@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Channel } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
+import { parseDeliveryMode, parseHlsBitrates } from "../prisma/db-columns";
 import { env } from "../config/env";
 import { buildLiquidsoapScript, type LiquidsoapParams } from "./liq-template";
 
@@ -119,8 +120,8 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
       name: channel.name,
       mount: channel.mount,
       harborPort: channel.harborPort,
-      deliveryMode: channel.deliveryMode,
-      hlsBitrates: channel.hlsBitrates,
+      deliveryMode: parseDeliveryMode(channel.deliveryMode),
+      hlsBitrates: parseHlsBitrates(channel.hlsBitrates),
       icecastBitrate: channel.icecastBitrate,
       hlsDir: join(env.engine.hlsRoot, channel.slug),
       mediaDir: join(env.engine.mediaRoot, channel.slug),

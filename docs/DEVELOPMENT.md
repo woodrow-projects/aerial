@@ -2,7 +2,7 @@
 
 Monorepo: **pnpm workspaces + Turborepo**. Packages:
 
-- `apps/control-plane` — NestJS (Fastify) API + engine supervisor (Prisma/Postgres)
+- `apps/control-plane` — NestJS (Fastify) API + engine supervisor (Prisma/SQLite)
 - `apps/web` — React + Vite SPA (operator control panel)
 - `packages/shared` — zod contracts + types shared by both
 - `engine/icecast` — Icecast image; `engine/liquidsoap` — generated-config notes
@@ -28,28 +28,20 @@ and starts the stack, and creates that admin:
 ./deploy/install.sh
 ```
 
-It first asks how you want Postgres:
-
-- **managed** — Aerial runs Postgres in a container for you (the `managed-db`
-  compose profile). The installer generates the password and, on every run,
-  reconciles the role password to `.env` in place — so a regenerated `.env` or a
-  restored box **never requires wiping the database**.
-- **external** — bring your own / a managed Postgres. You're prompted for
-  host/port/db/user/password/SSL mode; no Postgres container is started and your
-  credentials are never altered. Migrations are additive, so this safely
-  **adopts** an existing Aerial database (the first admin is seeded only if the
-  user table is empty).
+The database needs no setup: state lives in a single SQLite file
+(`/srv/data/aerial.db` on the `data` volume — ADR D11, amended). Migrations are
+additive, so re-installing over an existing volume safely **adopts** the
+existing database (the first admin is seeded only if the user table is empty).
 
 Re-running is safe: with a `.env` already present it just (re)builds and brings
 the stack up — it won't regenerate secrets or re-prompt. For CI / unattended
 installs, export the answers first and the script won't prompt:
 
 ```bash
-DB_MODE=managed SITE_ADDRESS=radio.example.com ACME_EMAIL=you@example.com \
+SITE_ADDRESS=radio.example.com ACME_EMAIL=you@example.com \
 PUBLIC_BASE_URL=https://radio.example.com \
 ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='strong-pw' ADMIN_NAME='You' \
 ./deploy/install.sh
-# external DB: DB_MODE=external plus DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD/DB_SSLMODE
 ```
 
 `AERIAL_WIPE_EXISTING=1 ./deploy/install.sh` removes the previous stack + volumes
@@ -58,17 +50,45 @@ first (opt-in clean slate — never required to recover).
 Open the control panel at `https://$SITE_ADDRESS` (or `http://localhost` with
 `SITE_ADDRESS=:80`). API docs at `/api/docs`.
 
+## Backup & restore (SQLite)
+
+All state is one SQLite file, `/srv/data/aerial.db`, on the `data` volume
+(ADR D11, amended). A consistent hot backup (safe while the app is running —
+never plain-copy a live database file, its WAL sidecar may be mid-checkpoint;
+`VACUUM INTO` snapshots atomically via the container's Node `node:sqlite`):
+
+```bash
+docker compose -f deploy/docker-compose.yml exec -T control-plane \
+  node -e 'new (require("node:sqlite").DatabaseSync)("/srv/data/aerial.db")
+             .exec("VACUUM INTO '\''/srv/data/aerial-backup.db'\''")'
+docker compose -f deploy/docker-compose.yml cp control-plane:/srv/data/aerial-backup.db ./aerial-backup.db
+docker compose -f deploy/docker-compose.yml exec -T control-plane rm /srv/data/aerial-backup.db
+```
+
+Or cold (stack stopped — a plain copy is then safe):
+
+```bash
+docker compose -f deploy/docker-compose.yml stop control-plane
+docker compose -f deploy/docker-compose.yml cp control-plane:/srv/data/aerial.db ./aerial-backup.db
+docker compose -f deploy/docker-compose.yml start control-plane
+```
+
+Restore = the reverse: stop the control plane, `cp` the file back to
+`control-plane:/srv/data/aerial.db`, start. This works across hosts — spin down
+a VM, keep the file, and restore it on a fresh install later. Ship the backup
+off-VM on a schedule (cron + object storage).
+
 ## Local dev (fast iteration, app outside Docker)
 
 ```bash
 pnpm install
 pnpm --filter @aerial/shared build          # other packages import its dist
 
-# bring up just Postgres + Icecast (postgres is behind the managed-db profile)
-docker compose -f deploy/docker-compose.yml --profile managed-db up -d postgres icecast
+# bring up just Icecast (the database is a local SQLite file — no container)
+docker compose -f deploy/docker-compose.yml up -d icecast
 
-# point the API at them (export or use a root .env loaded into your shell)
-export DATABASE_URL=postgresql://aerial:<pw>@localhost:5432/aerial?schema=public
+# point the API at it (export or use a root .env loaded into your shell)
+export DATABASE_URL=file:./prisma/dev.db
 export INTERNAL_API_TOKEN=dev-token ICECAST_SOURCE_PASSWORD=<pw>
 export PUBLIC_BASE_URL=http://localhost:5173 HLS_ROOT=./.data/hls MEDIA_ROOT=./.data/media
 

@@ -53,7 +53,7 @@ ENV LIQUIDSOAP_BIN=/usr/bin/liquidsoap
 # the runtime dirs so the named volumes inherit that ownership on first creation
 # (fresh volumes required — a volume created under the old root setup won't be
 # writable by this user).
-RUN mkdir -p /srv/hls /srv/media && chown -R 10000:10001 /srv
+RUN mkdir -p /srv/data /srv/hls /srv/media && chown -R 10000:10001 /srv
 USER 10000:10001
 
 WORKDIR /repo/apps/control-plane

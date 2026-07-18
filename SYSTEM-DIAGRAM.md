@@ -33,7 +33,7 @@ graph TD
         control_plane["control-plane :3000<br/>NestJS API · serves SPA · engine supervisor · CDN state machine<br/>runs prisma migrate deploy on start"]
         spa["React/Vite SPA<br/>(channels · auth · now-playing · CDN toggle)<br/>built into the control-plane image"]
         icecast["Icecast :8000<br/>(all channel MP3 mountpoints; never published)"]
-        postgres["Postgres 16 :5432<br/>(channels · stream keys · operators/sessions · CdnConfig)"]
+        sqlite["SQLite (in-process)<br/>/srv/data/aerial.db<br/>(channels · stream keys · operators/sessions · CdnConfig)"]
     end
 
     subgraph engine["Audio engine — child processes inside control-plane"]
@@ -43,7 +43,7 @@ graph TD
     subgraph data["Persistent volumes"]
         vol_hls["hls volume<br/>/srv/hls"]
         vol_media["media volume<br/>/srv/media (mksafe fallback)"]
-        vol_pgdata["pgdata volume<br/>/var/lib/postgresql/data"]
+        vol_data["data volume<br/>/srv/data (aerial.db)"]
         vol_caddy_data["caddy_data volume<br/>/data (ACME certs)"]
         vol_caddy_config["caddy_config volume<br/>/config"]
     end
@@ -66,7 +66,7 @@ graph TD
 
     %% --- control-plane responsibilities ---
     control_plane -->|"serves built assets"| spa
-    control_plane -->|"Prisma SQL/TCP :5432 (gated on healthcheck)"| postgres
+    control_plane -->|"Prisma (in-process file I/O, WAL)"| sqlite
     control_plane -->|"spawns/supervises 1 child per channel (restart + backoff)"| liquidsoap
     control_plane -->|"writes nowplaying.json"| vol_hls
     control_plane -.->|"depends_on (start ordering only — no runtime traffic)"| icecast
@@ -78,7 +78,7 @@ graph TD
     liquidsoap -->|"token hooks → :3000 /internal/{auth,status,metadata}"| control_plane
 
     %% --- datastore persistence ---
-    postgres -->|"persists data dir"| vol_pgdata
+    sqlite -->|"persists database file"| vol_data
 
     %% --- OPTIONAL CDN path (only while an operator has it enabled) ---
     control_plane -.->|"OPTIONAL: provision pull-zone → api.bunny.net"| cdn
@@ -119,10 +119,10 @@ graph TD
 | React/Vite SPA | Frontend | Operator UI for channels, auth, now-playing and the CDN toggle; built and baked into the control-plane image (served on `:3000`). | [`apps/web/src/`](./apps/web/src) (`App.tsx`, `api.ts`, `auth-client.ts`) |
 | Liquidsoap (1 per channel) | Child process (engine) | Per-channel engine spawned inside control-plane: binds harbor `8100+index`, crossfades the live streamer vs the `mksafe` fallback, writes the HLS rendition set to `/srv/hls`, optionally pushes an Icecast MP3 source, and calls the `/internal` hooks. | [`apps/control-plane/src/engine/`](./apps/control-plane/src/engine) (`liq-template.ts`, `engine.service.ts`) |
 | Icecast | Service (engine) | Hosts all channel MP3 mountpoints (created when Liquidsoap connects as source); `expose 8000` only, reachable solely via Caddy `/icecast/*`. | [`engine/icecast/`](./engine/icecast) |
-| Postgres 16 | Datastore | Stores channels, stream keys, operators/sessions and the singleton `CdnConfig` row; internal-only `:5432`; `pg_isready` healthcheck gates control-plane start. | [`apps/control-plane/prisma/schema.prisma`](./apps/control-plane/prisma/schema.prisma), [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
+| SQLite | Datastore | Stores channels, stream keys, operators/sessions and the singleton `CdnConfig` row; a single file (`/srv/data/aerial.db`, WAL mode) opened in-process by the control plane — no DB container. | [`apps/control-plane/prisma/schema.prisma`](./apps/control-plane/prisma/schema.prisma), [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
 | hls volume | Volume | Shared HLS output: written by Liquidsoap (and `nowplaying.json` by control-plane) at `/srv/hls`, mounted read-only into Caddy as the origin. | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
 | media volume | Volume | Per-channel fallback media at `/srv/media`, played by Liquidsoap as the `mksafe` fallback (silence if empty). | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
-| pgdata volume | Volume | Persists the Postgres data directory (`/var/lib/postgresql/data`). | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
+| data volume | Volume | Persists the SQLite database file (`/srv/data`). | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
 | caddy_data / caddy_config volumes | Volume | Persist Caddy's ACME certs/account (`/data`) and autosaved runtime config (`/config`). | [`deploy/docker-compose.yml`](./deploy/docker-compose.yml) |
 | CDN (Bunny.net pull-zone) | Optional external | Conditional HLS front for the Caddy origin; provisioned by control-plane via `api.bunny.net` **only when an operator enables the toggle**. Bunny is the only adapter today. | [`apps/control-plane/src/cdn/`](./apps/control-plane/src/cdn) (`cdn.service.ts`, `bunny.provider.ts`) |
 
@@ -135,7 +135,7 @@ on `main` today (per SPEC §3 non-goals and `docs/ADRS.md`):
   fallback source, not a populated library.
 - **Scheduling / clockwheels** — deferred; there is no scheduler/cron component (`@nestjs/schedule` is not
   wired in).
-- **Nightly off-VM Postgres backup (S3-compatible)** — described in ADR D11 but not yet implemented in code.
+- **Off-VM SQLite backup (S3-compatible)** — described in ADR D11 (amended) but not yet automated; manual procedure in docs/DEVELOPMENT.md.
 - **Kubernetes / K3s / KEDA, and any relay fleet (pods or ECS tasks)** — hard non-goals; the stack is plain
   Docker Compose and scales via CDN-over-HLS, not relays.
 - **AWS-native / SST / Fargate / CloudFront deployment** — rejected deployment model.

@@ -20,7 +20,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D8  | Metadata via a cacheable `nowplaying.json` side-channel + ICY for Icecast | Accepted |
 | D9  | Public surface: endpoints + metadata API only (no listen page in v1) | Accepted |
 | D10 | Security baseline (hashed keys, TLS, operator accounts, kill switch) | Accepted |
-| D11 | Postgres in-compose + off-VM backup; S3-compatible media; Caddy proxy | Accepted |
+| D11 | SQLite file-backed state + off-VM backup; S3-compatible media; Caddy proxy | Amended 2026-07-17 |
 | D12 | Opinionated defaults ON (R128 loudness, gapless, auto-TLS, sane bitrates) | Accepted |
 | D13 | Operator auth via better-auth (rejected OpenAuth) | Accepted |
 | D14 | Test-Driven Development is mandatory (Vitest; test-first) | Accepted |
@@ -199,12 +199,24 @@ the whole box.
 
 ## D11 — Data & storage
 
-**Decision.** **Postgres** in-compose (Prisma or Drizzle — chosen at scaffold time) with a **nightly off-VM
-backup** to S3-compatible storage. Auto-DJ media (fast-follow) lives in **S3-compatible object storage**
-(Hetzner Object Storage / Backblaze B2). **Caddy** terminates TLS and serves HLS segments as the CDN origin.
+**Decision (amended 2026-07-17).** **SQLite** (Prisma, WAL mode) as the only database — one file
+(`/srv/data/aerial.db` on the `data` volume) with an **off-VM backup** to S3-compatible storage. Auto-DJ
+media (fast-follow) lives in **S3-compatible object storage** (Hetzner Object Storage / Backblaze B2).
+**Caddy** terminates TLS and serves HLS segments as the CDN origin.
 
-**Rationale.** The off-VM backup is the single highest-value reliability fix for a single-VM design. Postgres
-(over SQLite) is chosen for the growing analytics/cost surface and the future hosted tier.
+**Rationale.** The control plane's write load is tiny (operator CRUD + one row per stream session; listener
+traffic never touches the DB), so Postgres's strengths — concurrent-write scaling, pooling, replication —
+are unreachable under the single-VM design (D1) while its failure modes (password drift, auth failures,
+container health) were the installer's worst support surface. SQLite makes backup/restore the product story:
+copy one file, resurrect the station anywhere. SQLite's dialect has no enum/scalar-list columns, so those
+fields are TEXT validated by the shared zod schemas (`src/prisma/db-columns.ts`); WAL + `busy_timeout` are
+set at connect. A future hosted tier or multi-node design re-opens this decision — the app layer is kept
+provider-agnostic (zod unions, no raw SQL) so re-adding Postgres is a schema+deploy exercise.
+
+**Superseded original (2026-06).** Postgres in-compose, chosen for the growing analytics/cost surface and
+the future hosted tier; dropped pre-v1 in favour of operational simplicity — dual-provider Prisma support
+(two schemas, two migration histories) was rejected as a permanent 2× maintenance tax whose barely-tested
+Postgres path would serve exactly the most data-sensitive users worst.
 
 ---
 
@@ -224,7 +236,7 @@ dense power-user surface, and it directly serves the "ship with ease" goal.
 token-guarded). It needs operator login before exposing sensitive mutations (media upload, CDN API keys,
 spend caps). Near-term needs: a few operator accounts + social/SSO (Google/GitHub).
 
-**Decision.** Use **better-auth** (in-app, Postgres/Prisma-native) for operator auth. better-auth owns the
+**Decision.** Use **better-auth** (in-app, Prisma-native) for operator auth. better-auth owns the
 `user/session/account/verification` tables (the unused legacy `User` model was dropped); its web handler is
 mounted on a raw Fastify route `/api/auth/*`; a global Nest `AuthGuard` validates the session on every
 controller route, with `@Public()` exempting `/internal/*` (which keeps its token guard) and the future
@@ -234,7 +246,7 @@ off in v1, switched on by setting credentials and rebuilding — no handler/guar
 
 **Rejected — OpenAuth (`@openauthjs/openauth`).** A standalone OAuth2 **issuer** (a 5th internet-facing
 service) whose reason to exist (multi-app SSO, multi-tenant token issuance, third-party API clients) is
-unused for one operator on a same-origin SPA. It has no first-party Postgres storage adapter (only
+unused for one operator on a same-origin SPA. It has no first-party SQL storage adapter (only
 Memory/DynamoDB/Cloudflare KV), bypasses the existing `User` model, forces an SMTP email flow for register,
 and is pre-1.0 / dormant (0.4.3, transferred out of the SST org). It contradicts the "minimal moving parts,
 non-developer can recover it" goal. better-auth covers the few-accounts + social/SSO needs in-app with zero
@@ -259,7 +271,7 @@ audio-delivery architecture, but it shipped **zero automated tests**. The core c
   fail, then write the minimum code to pass, then refactor under green. No production logic lands without a
   test that was written to fail first.
 - **Vitest** is the runner. Unit tests live **next to the code** as `<name>.spec.ts` and are pure: no real
-  Postgres, no real Liquidsoap, no network — collaborators (Prisma, `http.post`, the engine) are mocked.
+  database, no real Liquidsoap, no network — collaborators (Prisma, `http.post`, the engine) are mocked.
   Harness: `apps/control-plane/vitest.config.ts`; run with `pnpm test` (CI), `pnpm test:watch` (dev),
   `pnpm test:coverage`.
 - **Coverage is a ratchet, not a gate-to-100.** New/changed lines must be covered; the suite must stay

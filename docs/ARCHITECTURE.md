@@ -42,7 +42,7 @@ graph TD
             ICE["Icecast<br/>(all channel mounts; admin locked down)"]
         end
 
-        PG[("Postgres")]
+        PG[("SQLite<br/>(aerial.db, data volume)")]
         VOL[/"HLS segments<br/>(shared volume)"/]
     end
 
@@ -72,7 +72,7 @@ graph TD
 | **Engine Supervisor** | A control-plane module that generates each channel's `.liq` config and manages one Liquidsoap **child process per channel** with lifecycle hooks (start on boot, graceful drain on shutdown, restart on crash). |
 | **Liquidsoap (×N channels)** | Per channel: a `fallback([live, loop])` pipeline (instant cutover via `track_sensitive=false`, `mksafe` loop) emitting **two outputs** — an HLS rendition set + one Icecast mount. |
 | **Icecast** | Hosts all channel mountpoints for low-latency/legacy/directory listening. Admin/source locked down behind the TLS terminator; never CDN-fronted. |
-| **Postgres** | State: users, stations/channels, stream keys (hashed), stream logs, analytics. Nightly off-VM backup. |
+| **SQLite** | State: users, stations/channels, stream keys (hashed), stream logs, analytics. One file (WAL mode) inside the control-plane container on the `data` volume — backup = copy the file, off-VM. |
 | **SPA (React/Vite/TS)** | The opinionated operator control panel. Static assets served by the control-plane container. |
 | **CDN (Bunny, optional)** | The scale layer. Caches HLS segments at the edge so origin load stays ~constant under viral spikes. Auto-provisioned from the control plane (fast-follow). |
 
@@ -125,7 +125,7 @@ aerial/
     liquidsoap/         # templated .liq config-gen + Dockerfile (HLS + Icecast outputs, fallback/harbor)
     icecast/            # icecast config template + Dockerfile (all channel mounts; admin locked down)
   deploy/
-    docker-compose.yml  # control-plane(+SPA) · icecast · postgres · caddy
+    docker-compose.yml  # control-plane(+SPA) · icecast · caddy
     install.sh          # curl | bash one-command installer
     caddy/              # auto-TLS reverse proxy + HLS static origin
   docs/                 # ADRS.md · ARCHITECTURE.md · legacy/

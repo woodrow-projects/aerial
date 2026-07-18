@@ -5,25 +5,6 @@
 name: aerial
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    # Optional: only started for an Aerial-managed database. With an external
-    # Postgres the installer sets DB_MODE=external and this service stays off
-    # (the managed-db profile is not activated). See deploy/install.sh.
-    profiles: ["managed-db"]
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   icecast:
     # Hosts all channel mountpoints for low-latency/legacy/directory listening.
     # Locked down: never published directly — only reachable via Caddy (ADR D2).
@@ -48,19 +29,16 @@ services:
     env_file:
       - ../.env
     environment:
-      DATABASE_URL: ${DATABASE_URL}
+      # SQLite database file on the `data` volume (ADR D11, amended). Backup =
+      # copy this file (see docs/DEVELOPMENT.md).
+      DATABASE_URL: ${DATABASE_URL:-file:/srv/data/aerial.db}
       HLS_ROOT: /srv/hls
       MEDIA_ROOT: /srv/media
     depends_on:
-      # required:false → in external-DB mode (postgres service off) the control
-      # plane still starts and connects to DATABASE_URL; in managed mode it
-      # waits for the local Postgres to be healthy first.
-      postgres:
-        condition: service_healthy
-        required: false
       icecast:
         condition: service_started
     volumes:
+      - data:/srv/data
       - hls:/srv/hls
       - media:/srv/media
     expose:
@@ -92,7 +70,7 @@ services:
       - icecast
 
 volumes:
-  pgdata:
+  data:
   hls:
   media:
   caddy_data:

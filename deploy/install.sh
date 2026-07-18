@@ -2,20 +2,18 @@
 # Aerial one-command installer (ADR D1: "ship with ease").
 #
 # Interactive first-run setup: scaffolds .env with strong secrets, asks for the
-# few things only you can answer (database, domain, the first admin), brings the
-# stack up, and creates the first admin. Sign-up self-locks once that admin
-# exists — no env flip, no redeploy.
+# few things only you can answer (domain, the first admin), brings the stack up,
+# and creates the first admin. Sign-up self-locks once that admin exists — no
+# env flip, no redeploy.
 #
-# Database: choose **managed** (Aerial runs Postgres in Docker for you) or
-# **external** (bring your own / a managed Postgres). External never starts a
-# Postgres container and never touches your credentials.
+# Database: SQLite on the `data` volume (ADR D11, amended) — nothing to
+# configure. Backup = copy the database file (see docs/DEVELOPMENT.md).
 #
 # Usage:  ./deploy/install.sh                (from a checkout)
 #   or:   bash <(curl -fsSL <raw-url>/deploy/install.sh)
 #
-# Non-interactive (CI): export DB_MODE (managed|external), SITE_ADDRESS,
-# ACME_EMAIL, PUBLIC_BASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD (+ ADMIN_NAME); for
-# external also DB_HOST/DB_PORT/DB_NAME/DB_USER/DB_PASSWORD/DB_SSLMODE.
+# Non-interactive (CI): export SITE_ADDRESS, ACME_EMAIL, PUBLIC_BASE_URL,
+# ADMIN_EMAIL, ADMIN_PASSWORD (+ ADMIN_NAME).
 # AERIAL_WIPE_EXISTING=1 removes any previous stack + volumes first.
 set -euo pipefail
 
@@ -73,28 +71,6 @@ default_base_url() {
 	esac
 }
 
-# urlencode STRING — percent-encode everything outside the URL-unreserved set
-# (so a DB password with @ : / ? & etc. survives inside a connection URL).
-urlencode() {
-	local s="$1" out='' i c
-	for (( i = 0; i < ${#s}; i++ )); do
-		c="${s:i:1}"
-		case "$c" in
-			[a-zA-Z0-9.~_-]) out+="$c" ;;
-			*) printf -v c '%%%02X' "'$c"; out+="$c" ;;
-		esac
-	done
-	printf '%s' "$out"
-}
-
-# build_database_url HOST PORT DB USER PASSWORD [SSLMODE]
-build_database_url() {
-	local host="$1" port="$2" db="$3" user="$4" pass="$5" sslmode="${6:-}" url
-	url="postgresql://$(urlencode "$user"):$(urlencode "$pass")@${host}:${port}/${db}?schema=public"
-	[[ -n "$sslmode" ]] && url+="&sslmode=${sslmode}"
-	printf '%s' "$url"
-}
-
 # ── Prompt helpers (read from the terminal even under `bash <(curl …)`) ────────
 # ask VAR "Label" "default" — skipped if VAR is already set in the environment.
 ask() {
@@ -145,57 +121,9 @@ ask_password() {
 	done
 }
 
-# choose_db_mode — set DB_MODE to managed|external (env value respected).
-choose_db_mode() {
-	if [[ -n "${DB_MODE:-}" ]]; then
-		case "$DB_MODE" in managed|external) return 0 ;; *) die "DB_MODE must be 'managed' or 'external'." ;; esac
-	fi
-	[[ -r /dev/tty ]] || { DB_MODE=managed; return 0; }
-	printf '\n%sDatabase%s\n' "$C_CYAN" "$C_OFF" > /dev/tty
-	printf '  1) managed  — Aerial runs Postgres in Docker for you (recommended)\n' > /dev/tty
-	printf '  2) external — connect to your own / a managed Postgres\n' > /dev/tty
-	local reply
-	while :; do
-		printf 'Choose [1]: ' > /dev/tty
-		read -r reply < /dev/tty || true
-		case "${reply:-1}" in
-			1|managed)  DB_MODE=managed;  break ;;
-			2|external) DB_MODE=external; break ;;
-			*) printf '  Enter 1 or 2.\n' > /dev/tty ;;
-		esac
-	done
-}
-
-# ── Compose wrapper (managed mode also activates the postgres service) ─────────
+# ── Compose wrapper ────────────────────────────────────────────────────────────
 compose() {
-	local extra=()
-	[[ "${DB_MODE:-}" == "managed" ]] && extra=(--profile managed-db)
-	docker compose -f deploy/docker-compose.yml --env-file .env "${extra[@]}" "$@"
-}
-
-wait_for_postgres() {
-	local tries=0 max=30
-	printf '%s▸ Waiting for Postgres%s' "$C_CYAN" "$C_OFF"
-	while (( tries < max )); do
-		if compose exec -T postgres pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
-			printf ' ✓\n'; return 0
-		fi
-		printf '.'; tries=$((tries + 1)); sleep 2
-	done
-	printf '\n'; return 1
-}
-
-# Force the managed role password to equal .env — a no-op on a freshly
-# initialised volume, a NON-DESTRUCTIVE repair if an older volume's password
-# drifted (Postgres ignores POSTGRES_PASSWORD once its data dir exists). Uses the
-# image's local-socket trust auth, so it needs no prior password and loses no data.
-reconcile_managed_db_password() {
-	if compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-		-c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '${POSTGRES_PASSWORD}';" >/dev/null 2>&1; then
-		say "Database credentials reconciled."
-	else
-		say "Note: could not auto-reconcile the database password; continuing."
-	fi
+	docker compose -f deploy/docker-compose.yml --env-file .env "$@"
 }
 
 # Poll until the control plane accepts connections (its CMD runs
@@ -216,8 +144,10 @@ wait_for_control_plane() {
 
 wipe_stack_volumes() {
 	say "Removing the previous stack and its data volumes…"
-	docker compose -f deploy/docker-compose.yml --profile managed-db down -v --remove-orphans >/dev/null 2>&1 || true
-	docker volume rm aerial_pgdata aerial_hls aerial_media aerial_caddy_data aerial_caddy_config >/dev/null 2>&1 || true
+	docker compose -f deploy/docker-compose.yml down -v --remove-orphans >/dev/null 2>&1 || true
+	# aerial_pgdata is the pre-SQLite Postgres volume — removed here so a wipe
+	# also cleans up installs from before the ADR D11 amendment.
+	docker volume rm aerial_data aerial_pgdata aerial_hls aerial_media aerial_caddy_data aerial_caddy_config >/dev/null 2>&1 || true
 }
 
 # Sourced for tests (AERIAL_INSTALL_LIB=1) → define helpers and stop here.
@@ -244,25 +174,8 @@ if (( FRESH )); then
 	say "First run — let's configure this install."
 	cp .env.example .env
 
-	# 1) Database: managed (we run Postgres) or external (bring your own).
-	choose_db_mode
-	set_env DB_MODE "$DB_MODE"
-	if [[ "$DB_MODE" == "managed" ]]; then
-		POSTGRES_USER="aerial"; POSTGRES_DB="aerial"; POSTGRES_PASSWORD="$(openssl rand -hex 16)"
-		set_env POSTGRES_USER "$POSTGRES_USER"
-		set_env POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
-		set_env POSTGRES_DB "$POSTGRES_DB"
-		set_env DATABASE_URL "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public"
-	else
-		say "Enter your Postgres connection details:"
-		ask DB_HOST "  Host" ""
-		ask DB_PORT "  Port" "5432"
-		ask DB_NAME "  Database" "aerial"
-		ask DB_USER "  User" "aerial"
-		ask_secret DB_PASSWORD "  Password"
-		ask DB_SSLMODE "  SSL mode (require|prefer|disable)" "require"
-		set_env DATABASE_URL "$(build_database_url "$DB_HOST" "$DB_PORT" "$DB_NAME" "$DB_USER" "$DB_PASSWORD" "$DB_SSLMODE")"
-	fi
+	# 1) Database: SQLite on the `data` volume — nothing to ask.
+	set_env DATABASE_URL "file:/srv/data/aerial.db"
 
 	# 2) Site / TLS.
 	ask SITE_ADDRESS "Site address (domain, e.g. radio.example.com; ':80' for no-TLS local)" "radio.example.com"
@@ -287,35 +200,13 @@ if (( FRESH )); then
 	# AUTH_DISABLE_SIGNUP stays false — sign-up self-locks once the admin exists.
 else
 	say "Using existing .env (secrets unchanged)."
-	DB_MODE="$(load_env_var DB_MODE)"; DB_MODE="${DB_MODE:-managed}"
 	PUBLIC_BASE_URL="$(load_env_var PUBLIC_BASE_URL)"
-	if [[ "$DB_MODE" == "managed" ]]; then
-		POSTGRES_USER="$(load_env_var POSTGRES_USER)"; POSTGRES_USER="${POSTGRES_USER:-aerial}"
-		POSTGRES_DB="$(load_env_var POSTGRES_DB)"; POSTGRES_DB="${POSTGRES_DB:-aerial}"
-		POSTGRES_PASSWORD="$(load_env_var POSTGRES_PASSWORD)"
-	fi
-fi
-
-# Managed DB: bring Postgres up first, reconcile its password, then the rest.
-if [[ "$DB_MODE" == "managed" ]]; then
-	say "Starting Postgres…"
-	compose up -d postgres
-	wait_for_postgres || die "Postgres did not become healthy. Check: docker compose -f deploy/docker-compose.yml --profile managed-db logs postgres"
-	reconcile_managed_db_password
-else
-	say "Using external Postgres (no container will be started for it)."
 fi
 
 say "Building and starting the stack… (the first build can take a few minutes)"
 compose up -d --build
 
 if ! wait_for_control_plane; then
-	if compose logs control-plane 2>/dev/null | grep -q 'P1000'; then
-		if [[ "$DB_MODE" == "external" ]]; then
-			die "Database authentication failed (P1000) against your external Postgres. Re-check the host/user/password/SSL mode (DATABASE_URL in .env)."
-		fi
-		die "Database authentication failed (P1000). For a clean slate: AERIAL_WIPE_EXISTING=1 ./deploy/install.sh"
-	fi
 	die "Control plane did not become ready. Check logs: docker compose -f deploy/docker-compose.yml logs control-plane"
 fi
 

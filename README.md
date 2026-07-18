@@ -27,7 +27,7 @@ It's a modern, opinionated alternative to AzuraCast.
 ```
 Streamer (BUTT/Mixxx) ─▶ TLS ─▶ Liquidsoap (per channel) ─┬─▶ HLS rendition set ─▶ Caddy ─▶ [CDN] ─▶ web/mobile
                                                            └─▶ Icecast mount  ────▶ Caddy ─────────▶ VLC/Sonos/car
-NestJS control plane: channels · stream keys · supervises Liquidsoap · now-playing · cost   (state ▶ Postgres)
+NestJS control plane: channels · stream keys · supervises Liquidsoap · now-playing · cost   (state ▶ SQLite)
 ```
 
 Two delivery paths: **HLS** (default — CDN-cacheable, web/mobile) and an origin-direct **Icecast** mount
@@ -39,7 +39,7 @@ Two delivery paths: **HLS** (default — CDN-cacheable, web/mobile) and an origi
 - **Web UI:** React + Vite + TypeScript (served by the control-plane container in v1)
 - **Audio engine:** Liquidsoap (one process per channel) + Icecast
 - **Edge / TLS:** Caddy (auto Let's Encrypt) → optional Bunny.net CDN over HLS
-- **State:** Postgres
+- **State:** SQLite (one file; backup = copy it)
 - **Deploy:** Docker Compose on one flat-bandwidth VM (Hetzner recommended)
 
 ## Status

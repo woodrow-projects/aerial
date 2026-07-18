@@ -45,7 +45,7 @@ A single **Docker Compose** stack on one flat-bandwidth VM:
   stream keys, the engine supervisor, the now-playing pump.
 - **Engine** — **one Liquidsoap process per channel** (spawned/supervised by the control plane), each
   emitting an **HLS rendition set** *and* **one Icecast mount**; a single **Icecast** hosts all mounts.
-- **Postgres** — state, with nightly off-VM backup.
+- **SQLite** — state in one file (WAL mode), with off-VM backup (copy the file).
 
 Delivery has two paths: **HLS** (default, CDN-cacheable, web/mobile, ~16–24s) and **Icecast** (origin-direct,
 ~2–8s, legacy/interactive/directories). The CDN only ever serves HLS. Full detail in
@@ -132,7 +132,7 @@ CloudFront only if already AWS-locked.
 - **Test-first, red→green→refactor.** Write a failing `*.spec.ts` that pins the intended behaviour, watch it
   fail, write the minimum code to pass, then refactor under green. No production logic merges without a test
   that was written to fail first; bug fixes start with a failing regression test.
-- **Vitest**, unit tests next to the code as `<name>.spec.ts`, fully mocked (no real Postgres/Liquidsoap/
+- **Vitest**, unit tests next to the code as `<name>.spec.ts`, fully mocked (no real database/Liquidsoap/
   network). Run `pnpm test` (CI), `pnpm test:watch` (dev), `pnpm test:coverage`. Coverage is a per-change
   ratchet — new/changed lines covered, suite stays green — not a chase to 100%.
 - **Integration/e2e stays real and separate:** the docker-compose engine validation (real Liquidsoap 2.2.x +

@@ -13,7 +13,7 @@ function makeChannel(): Channel {
     isActive: true,
     deliveryMode: "both",
     harborPort: 8100,
-    hlsBitrates: [64, 128],
+    hlsBitrates: "[64,128]", // stored as JSON text (SQLite has no scalar lists)
     icecastBitrate: 128,
     createdAt: new Date("2026-06-18T00:00:00Z"),
     updatedAt: new Date("2026-06-18T00:00:00Z"),
@@ -26,6 +26,17 @@ function makeService(hlsBaseUrl: string): ChannelsService {
   const nowPlaying = { isLive: () => false };
   return new ChannelsService(undefined as never, undefined as never, nowPlaying as never, cdn as never);
 }
+
+describe("ChannelsService toDto column decoding", () => {
+  it("decodes the stored deliveryMode and hlsBitrates columns into the DTO shapes", () => {
+    const svc = makeService(ORIGIN);
+    const dto = (
+      svc as unknown as { toDto: (c: Channel) => { deliveryMode: string; hlsBitrates: number[] } }
+    ).toDto(makeChannel());
+    expect(dto.deliveryMode).toBe("both");
+    expect(dto.hlsBitrates).toEqual([64, 128]);
+  });
+});
 
 describe("ChannelsService endpoint rewrite (CDN)", () => {
   it("serves HLS + nowplaying from the origin when the CDN is inactive", () => {

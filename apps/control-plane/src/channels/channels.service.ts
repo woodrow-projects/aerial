@@ -2,6 +2,7 @@ import { ConflictException, Injectable, NotFoundException } from "@nestjs/common
 import { Prisma, type Channel } from "@prisma/client";
 import type { ChannelDto, ChannelEndpoints, CreateChannelInput, UpdateChannelInput } from "@aerial/shared";
 import { PrismaService } from "../prisma/prisma.service";
+import { parseDeliveryMode, parseHlsBitrates, serializeHlsBitrates } from "../prisma/db-columns";
 import { EngineService } from "../engine/engine.service";
 import { NowPlayingService } from "../nowplaying/nowplaying.service";
 import { CdnService } from "../cdn/cdn.service";
@@ -37,7 +38,7 @@ export class ChannelsService {
           mount: `/${input.slug}`,
           harborPort,
           deliveryMode: input.deliveryMode,
-          hlsBitrates: input.hlsBitrates ?? [64, 128],
+          hlsBitrates: serializeHlsBitrates(input.hlsBitrates ?? [64, 128]),
           icecastBitrate: input.icecastBitrate ?? 128,
         },
       });
@@ -61,7 +62,7 @@ export class ChannelsService {
         name: input.name ?? undefined,
         isActive: input.isActive ?? undefined,
         deliveryMode: input.deliveryMode ?? undefined,
-        hlsBitrates: input.hlsBitrates ?? undefined,
+        hlsBitrates: input.hlsBitrates ? serializeHlsBitrates(input.hlsBitrates) : undefined,
         icecastBitrate: input.icecastBitrate ?? undefined,
       },
     });
@@ -89,8 +90,8 @@ export class ChannelsService {
       name: channel.name,
       slug: channel.slug,
       isActive: channel.isActive,
-      deliveryMode: channel.deliveryMode,
-      hlsBitrates: channel.hlsBitrates,
+      deliveryMode: parseDeliveryMode(channel.deliveryMode),
+      hlsBitrates: parseHlsBitrates(channel.hlsBitrates),
       icecastBitrate: channel.icecastBitrate,
       mount: channel.mount,
       harborPort: channel.harborPort,

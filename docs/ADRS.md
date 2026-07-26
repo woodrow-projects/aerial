@@ -25,6 +25,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D13 | Operator auth via better-auth (rejected OpenAuth) | Accepted |
 | D14 | Test-Driven Development is mandatory (Vitest; test-first) | Accepted |
 | D15 | SPA UI built on shadcn/ui (Radix + Tailwind), TanStack Router/Query | Accepted |
+| D16 | CLI station state: local config + provider labels; no hosted state service | Accepted |
 
 ---
 
@@ -326,3 +327,35 @@ consistent.
 - *A batteries-included kit (MUI/Chakra):* heavier runtime, opinionated styling that's harder to theme to a
   custom brand, and a black-box dependency vs vendored, editable components.
 - *Headless-only (Radix/Headless UI alone):* rebuilds the variant/styling layer shadcn already provides.
+
+---
+
+## D16 — CLI station state: local config + provider labels; no hosted state service
+
+**Context.** The `aerial` CLI (see `docs/plans/`) provisions **stations** (one domain → one VM → one
+Aerial install; see `CONTEXT.md`) on cloud providers on the user's behalf. A user may run several
+stations across several providers and needs to list, add, and tear them down. Where does that
+inventory live?
+
+**Decision.** **The provider is the database.** Every resource the CLI creates (VM, DNS record,
+firewall, SSH key) is tagged/labeled at the provider (`managed-by=aerial`,
+`aerial-station=<domain>`). The CLI keeps only a local config dir (`~/.config/aerial/`): saved
+provider API tokens plus a *cache* of known stations. `aerial ls` reconstructs truth by
+label-filtered provider API queries; `aerial down <station>` deletes exactly the labeled resource
+set. The CLI is imperative (create/list/destroy), so no declarative state diffing — and therefore no
+Terraform-style state file — is needed. The CLI operates strictly at station level; channels are the
+control panel's job.
+
+**Rationale.** Full multi-station management UX ("two stations live, tear down one, spin up a
+third") with **zero infrastructure Aerial hosts or pays for**. Recovery story: lost laptop →
+re-enter the API token → `aerial ls` finds everything by label. Precedent: `doctl`/`flyctl`-style
+imperative CLIs.
+
+**Rejected.**
+- *Hosted state/account service (`aerial login`):* permanent infra + cost + a privacy surface, to
+  solve a problem labels already solve. Re-opened only if a hosted tier (health notifications,
+  cross-device continuity) ever exists.
+- *Fully stateless CLI (spin up and forget):* forces manual teardown in the provider console —
+  exactly the surface the CLI exists to hide.
+- *Terraform/OpenTofu under the hood:* brings the state-file problem back plus a runtime dependency;
+  overkill for an imperative create/list/destroy lifecycle.

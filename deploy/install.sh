@@ -20,6 +20,11 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Under `bash <(curl …)` BASH_SOURCE is a /dev/fd path and REPO_ROOT is not a
+# checkout. Detected here; the self-bootstrap runs in the main flow below.
+HAVE_REPO_TREE=1
+[[ -f deploy/docker-compose.yml && -f .env.example ]] || HAVE_REPO_TREE=0
+
 # ── Output helpers ────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
 	C_CYAN=$'\033[1;36m'; C_RED=$'\033[1;31m'; C_DIM=$'\033[2m'; C_OFF=$'\033[0m'
@@ -73,9 +78,11 @@ default_base_url() {
 
 # ── Prompt helpers (read from the terminal even under `bash <(curl …)`) ────────
 # ask VAR "Label" "default" — skipped if VAR is already set in the environment.
+# Set-but-EMPTY also counts as provided: a non-interactive driver (the aerial
+# CLI) legitimately passes ACME_EMAIL="" for a no-TLS local install.
 ask() {
 	local __var="$1" label="$2" default="${3:-}" reply prompt
-	[[ -n "${!__var:-}" ]] && return 0
+	[[ -n "${!__var+x}" ]] && return 0
 	if [[ ! -r /dev/tty ]]; then
 		[[ -n "$default" ]] && { printf -v "$__var" '%s' "$default"; return 0; }
 		die "No terminal for prompts and \$$__var is unset. Set it in the environment and re-run."
@@ -160,6 +167,31 @@ say "Checking prerequisites…"
 command -v docker >/dev/null 2>&1 || die "Docker is required. Install Docker Engine first: https://docs.docker.com/engine/install/"
 docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required (docker compose)."
 
+# SELF-BOOTSTRAP: no repo tree — fetch the pinned release tarball and re-exec
+# from it. exec inherits the environment, so non-interactive vars survive.
+if (( ! HAVE_REPO_TREE )); then
+	if [[ "${AERIAL_BOOTSTRAPPED:-}" == "1" ]]; then
+		die "Bootstrapped tree at $REPO_ROOT still lacks deploy/docker-compose.yml or .env.example — refusing to loop. Check AERIAL_REF / AERIAL_TARBALL_URL."
+	fi
+	command -v curl >/dev/null 2>&1 || die "curl is required to download the Aerial release."
+	command -v tar >/dev/null 2>&1 || die "tar is required to unpack the Aerial release."
+	# Default must match PINNED_AERIAL_REF in packages/cli/src/version.ts.
+	AERIAL_REF="${AERIAL_REF:-v0.1.0}"
+	# Override exists for tests/mirrors.
+	AERIAL_TARBALL_URL="${AERIAL_TARBALL_URL:-https://codeload.github.com/mattasaminew/aerial/tar.gz/${AERIAL_REF}}"
+	if [[ "$EUID" -eq 0 ]]; then
+		AERIAL_DIR="/opt/aerial"
+	else
+		AERIAL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/aerial/station"
+	fi
+	say "No checkout found — fetching Aerial ${AERIAL_REF} into ${AERIAL_DIR}…"
+	mkdir -p "$AERIAL_DIR"
+	curl -fsSL "$AERIAL_TARBALL_URL" | tar -xz --strip-components=1 -C "$AERIAL_DIR" \
+		|| die "Could not download/extract $AERIAL_TARBALL_URL"
+	export AERIAL_BOOTSTRAPPED=1
+	exec bash "$AERIAL_DIR/deploy/install.sh"
+fi
+
 # Opt-in clean slate (deletes the database — never required, only on request).
 if [[ "${AERIAL_WIPE_EXISTING:-}" == "1" ]]; then
 	wipe_stack_volumes
@@ -173,6 +205,7 @@ if (( FRESH )); then
 	command -v openssl >/dev/null 2>&1 || die "openssl is required to generate secrets."
 	say "First run — let's configure this install."
 	cp .env.example .env
+	chmod 600 .env  # holds every secret this install generates (D10)
 
 	# 1) Database: SQLite on the `data` volume — nothing to ask.
 	set_env DATABASE_URL "file:/srv/data/aerial.db"

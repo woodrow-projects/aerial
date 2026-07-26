@@ -1,0 +1,112 @@
+# CLI release pipeline (docs/plans/aerial-cli.md, M5).
+#
+# Tag cli-vX.Y.Z -> cross-compile with bun (all four targets from linux — no
+# matrix), attach tarballs + SHA256SUMS to a GitHub Release, render the
+# Homebrew formula and push it to woodrow-projects/homebrew-tap. Zero infra
+# beyond GitHub.
+name: release-cli
+
+on:
+  push:
+    tags:
+      - "cli-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Release gate: a CLI binary only installs a combination that was tested
+      # together (src/version.ts) — refuse to publish if the pinned aerial ref
+      # is missing or the tag disagrees with CLI_VERSION.
+      - name: Assert version pinning
+        run: |
+          version_ts=packages/cli/src/version.ts
+          cli_version="$(grep '^export const CLI_VERSION' "$version_ts" | sed -E 's/.*"([^"]+)".*/\1/')"
+          pinned_ref="$(grep '^export const PINNED_AERIAL_REF' "$version_ts" | sed -E 's/.*"([^"]+)".*/\1/')"
+          [ -n "$cli_version" ] || { echo "::error::Could not read CLI_VERSION from $version_ts"; exit 1; }
+          [ -n "$pinned_ref" ] || { echo "::error::Could not read PINNED_AERIAL_REF from $version_ts"; exit 1; }
+
+          tag_version="${GITHUB_REF_NAME#cli-v}"
+          if [ "$tag_version" != "$cli_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME (version $tag_version) does not match CLI_VERSION=$cli_version in $version_ts."
+            exit 1
+          fi
+
+          if ! git ls-remote --exit-code --tags origin "refs/tags/$pinned_ref" >/dev/null; then
+            echo "::error::Pinned aerial ref '$pinned_ref' does not exist on origin. Create and push that release tag first — the CLI installs it (PINNED_AERIAL_REF in $version_ts)."
+            exit 1
+          fi
+
+          echo "VERSION=$cli_version" >> "$GITHUB_ENV"
+          echo "PINNED_REF=$pinned_ref" >> "$GITHUB_ENV"
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Test
+        run: pnpm --filter @aerial/cli test
+
+      - name: Compile binaries (bun cross-compiles all targets)
+        run: |
+          mkdir -p assets
+          for target in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do
+            pnpm --filter @aerial/cli exec bun build --compile --minify src/index.ts \
+              --target="bun-$target" --outfile dist-bin/aerial
+            tar -C packages/cli/dist-bin -czf "assets/aerial-$target.tar.gz" aerial
+            rm -rf packages/cli/dist-bin
+          done
+
+      - name: Checksums
+        run: cd assets && sha256sum aerial-*.tar.gz > SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Re-runnable: a re-run for an existing tag (e.g. after a transient
+          # tap-push failure) replaces the assets instead of failing on create.
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber assets/aerial-*.tar.gz assets/SHA256SUMS
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "aerial CLI $VERSION" \
+              --notes "aerial CLI $VERSION (installs aerial $PINNED_REF)." \
+              assets/aerial-*.tar.gz assets/SHA256SUMS
+          fi
+
+      - name: Render Homebrew formula
+        run: bash packages/cli/distribution/make-formula.sh "$VERSION" assets
+
+      - name: Push formula to tap
+        env:
+          TAP_PUSH_TOKEN: ${{ secrets.TAP_PUSH_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -z "$TAP_PUSH_TOKEN" ]; then
+            echo "TAP_PUSH_TOKEN secret not configured — skipping tap push; attaching aerial.rb to the release instead."
+            gh release upload "$GITHUB_REF_NAME" --clobber assets/aerial.rb
+            exit 0
+          fi
+          git clone "https://x-access-token:${TAP_PUSH_TOKEN}@github.com/woodrow-projects/homebrew-tap.git" tap
+          mkdir -p tap/Formula
+          cp assets/aerial.rb tap/Formula/aerial.rb
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/aerial.rb
+          # Re-runnable: an identical formula (re-run of a published tag) is a no-op.
+          if git diff --cached --quiet; then
+            echo "Formula unchanged — tap already up to date."
+          else
+            git commit -m "[release-cli] aerial $VERSION"
+            git push
+          fi

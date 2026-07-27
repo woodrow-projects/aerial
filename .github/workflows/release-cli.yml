@@ -76,6 +76,9 @@ jobs:
           # tap-push failure) replaces the assets instead of failing on create.
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" --clobber assets/aerial-*.tar.gz assets/SHA256SUMS
+            # Deleting/moving a release's tag flips it to DRAFT (assets then 404
+            # publicly) — force it published after every re-upload.
+            gh release edit "$GITHUB_REF_NAME" --draft=false
           else
             gh release create "$GITHUB_REF_NAME" \
               --title "aerial CLI $VERSION" \

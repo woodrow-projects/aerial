@@ -178,7 +178,7 @@ if (( ! HAVE_REPO_TREE )); then
 	# Default must match PINNED_AERIAL_REF in packages/cli/src/version.ts.
 	AERIAL_REF="${AERIAL_REF:-v0.1.0}"
 	# Override exists for tests/mirrors.
-	AERIAL_TARBALL_URL="${AERIAL_TARBALL_URL:-https://codeload.github.com/mattasaminew/aerial/tar.gz/${AERIAL_REF}}"
+	AERIAL_TARBALL_URL="${AERIAL_TARBALL_URL:-https://codeload.github.com/woodrow-projects/aerial/tar.gz/${AERIAL_REF}}"
 	if [[ "$EUID" -eq 0 ]]; then
 		AERIAL_DIR="/opt/aerial"
 	else

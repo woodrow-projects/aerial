@@ -18,8 +18,9 @@
   `PINNED_AERIAL_REF` + tarball URL — the concrete pinning mechanism); `bun` as a workspace
   devDependency (compile step); DNS polling via DNS-over-HTTPS (dns.google) so polls are
   injectable/cache-transparent; registrar hints via rdap.org (best-effort, never blocking);
-  GitHub slugs hardcoded: releases/tarballs on `mattasaminew/aerial`; the tap lives in the org
-  (`woodrow-projects/homebrew-tap`) — only the tap moved to the org for now.
+  GitHub slugs hardcoded: everything lives in the org — releases/tarballs on
+  `woodrow-projects/aerial` (repo transferred from the personal account 2026-07-26),
+  formulas in `woodrow-projects/homebrew-tap`.
 - **install.sh changes beyond the bootstrap (M0):** `ask()` now treats a *set-but-empty* env var as
   provided (the CLI legitimately passes `ACME_EMAIL=""` for no-TLS local installs — previously this
   re-prompted interactively); fresh installs `chmod 600 .env` (D10). The self-bootstrap block

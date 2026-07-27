@@ -7,7 +7,7 @@
  */
 export const CLI_VERSION = "0.1.0";
 
-export const AERIAL_REPO = "mattasaminew/aerial";
+export const AERIAL_REPO = "woodrow-projects/aerial";
 
 /** The aerial repo ref this CLI version installs (created at release time). */
 export const PINNED_AERIAL_REF = "v0.1.0";

@@ -451,6 +451,7 @@ describe("hetznerProvider", () => {
     it("deletes in vm -> firewall -> zone -> ssh-key order regardless of input order", async () => {
       const { provider, calls } = makeProvider({
         "DELETE /v1/servers/9001": { status: 200, json: { action: { id: 1 } } },
+        "GET /v1/servers/9001": { status: 404, json: { error: { code: "not_found", message: "gone" } } },
         "DELETE /v1/firewalls/55": { status: 204 },
         "DELETE /v1/zones/42": { status: 201, json: { action: { id: 2 } } },
         "DELETE /v1/ssh_keys/77": { status: 204 },
@@ -458,6 +459,7 @@ describe("hetznerProvider", () => {
       await provider.destroyResources(resources);
       expect(calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
         "DELETE /v1/servers/9001",
+        "GET /v1/servers/9001", // server-gone poll (404 straight away here)
         "DELETE /v1/firewalls/55",
         "DELETE /v1/zones/42",
         "DELETE /v1/ssh_keys/77",
@@ -467,6 +469,7 @@ describe("hetznerProvider", () => {
     it("retries the firewall delete while the server teardown holds it (423/409)", async () => {
       const { provider, calls, sleeps } = makeProvider({
         "DELETE /v1/servers/9001": { status: 200, json: { action: { id: 1 } } },
+        "GET /v1/servers/9001": { status: 404, json: { error: { code: "not_found", message: "gone" } } },
         "DELETE /v1/firewalls/55": [
           { status: 423, json: { error: { code: "locked", message: "firewall is locked" } } },
           { status: 409, json: { error: { code: "conflict", message: "resource changed" } } },
@@ -479,6 +482,43 @@ describe("hetznerProvider", () => {
       const fwCalls = calls.filter((c) => c.url.pathname === "/v1/firewalls/55");
       expect(fwCalls.length).toBe(3);
       expect(sleeps.length).toBe(2);
+    });
+
+    it("waits for the async server delete to finish before touching the firewall", async () => {
+      // Live e2e (asiatic.black): DELETE /servers returns an action, the server
+      // dies seconds later, and the firewall 409s resource_in_use until then.
+      const { provider, calls, sleeps } = makeProvider({
+        "DELETE /v1/servers/9001": { status: 200, json: { action: { id: 1 } } },
+        "GET /v1/servers/9001": [
+          { status: 200, json: { server: serverFixture() } },
+          { status: 200, json: { server: serverFixture() } },
+          { status: 404, json: { error: { code: "not_found", message: "gone" } } },
+        ],
+        "DELETE /v1/firewalls/55": { status: 204 },
+        "DELETE /v1/zones/42": { status: 201, json: { action: { id: 2 } } },
+        "DELETE /v1/ssh_keys/77": { status: 204 },
+      });
+      await provider.destroyResources(resources);
+      const seq = calls.map((c) => `${c.method} ${c.url.pathname}`);
+      // The poll sits strictly between the server delete and the firewall delete.
+      expect(seq.indexOf("DELETE /v1/firewalls/55")).toBeGreaterThan(seq.lastIndexOf("GET /v1/servers/9001"));
+      expect(seq.filter((x) => x === "GET /v1/servers/9001").length).toBe(3);
+      expect(sleeps.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it("retries the firewall delete on a resource_in_use error code regardless of status", async () => {
+      const { provider, calls } = makeProvider({
+        "DELETE /v1/servers/9001": { status: 200, json: { action: { id: 1 } } },
+        "GET /v1/servers/9001": { status: 404, json: { error: { code: "not_found", message: "gone" } } },
+        "DELETE /v1/firewalls/55": [
+          { status: 412, json: { error: { code: "resource_in_use", message: "firewall with ID 55 is still in use" } } },
+          { status: 204 },
+        ],
+        "DELETE /v1/zones/42": { status: 201, json: { action: { id: 2 } } },
+        "DELETE /v1/ssh_keys/77": { status: 204 },
+      });
+      await provider.destroyResources(resources);
+      expect(calls.filter((c) => c.url.pathname === "/v1/firewalls/55").length).toBe(2);
     });
 
     it("gives up with CliError when the firewall stays locked", async () => {

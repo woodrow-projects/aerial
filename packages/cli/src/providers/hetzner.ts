@@ -42,6 +42,9 @@ const POLL_ATTEMPTS = 60;
 // Firewall delete can race the VM teardown while the server still holds it.
 const FW_DELETE_RETRIES = 5;
 const FW_RETRY_MS = 3_000;
+/** Server deletes are async; a cx-class VM can take well over a minute to go. */
+const SERVER_GONE_RETRIES = 45;
+const SERVER_GONE_MS = 2_000;
 
 const TOKEN_HELP = [
   "1. Sign in at https://console.hetzner.cloud — new accounts may take up to a",
@@ -205,22 +208,47 @@ export function hetznerProvider(deps: ProviderDeps, sleep: Sleep = realSleep): C
   };
 
   // 404 → already gone: `down` re-runs idempotently over partial teardowns.
-  const deleteResource = async (path: string): Promise<void> => {
+  // Returns whether the resource actually existed (false on 404).
+  const deleteResource = async (path: string): Promise<boolean> => {
     const res = await send("DELETE", path);
-    if (res.ok || res.status === 404) return;
-    await fail(res);
+    if (res.ok) return true;
+    if (res.status === 404) return false;
+    return fail(res);
+  };
+
+  // DELETE /servers only *starts* the teardown; the firewall refuses to die
+  // (resource_in_use) while the server still exists. Poll until the API stops
+  // knowing the server; on window exhaustion fall through to the firewall
+  // retry below rather than failing here.
+  const waitServerGone = async (id: string): Promise<void> => {
+    for (let attempt = 0; attempt < SERVER_GONE_RETRIES; attempt++) {
+      const res = await send("GET", `/servers/${id}`);
+      if (res.status === 404) return;
+      await res.body?.cancel().catch(() => {});
+      await sleep(SERVER_GONE_MS);
+    }
   };
 
   const deleteFirewall = async (id: string): Promise<void> => {
     for (let attempt = 0; ; attempt++) {
       const res = await send("DELETE", `/firewalls/${id}`);
       if (res.ok || res.status === 404) return;
-      // locked (423) / conflict (409) while the dying server still holds it.
-      if ((res.status === 409 || res.status === 423) && attempt < FW_DELETE_RETRIES) {
+      if (res.status === 401) throw tokenError();
+      // Retryable while the dying server still holds the firewall: locked
+      // (423), conflict (409), or a resource_in_use error code on any status
+      // (the live API's actual answer — the body is authoritative, not the
+      // status). Read the body once; it also feeds the failure message.
+      const body = (await res.json().catch(() => null)) as {
+        error?: { code?: string; message?: string };
+      } | null;
+      const code = body?.error?.code;
+      const retryable = res.status === 409 || res.status === 423 || code === "resource_in_use";
+      if (retryable && attempt < FW_DELETE_RETRIES) {
         await sleep(FW_RETRY_MS);
         continue;
       }
-      await fail(res);
+      const detail = body?.error?.message ? `${code}: ${body.error.message}` : `HTTP ${res.status}`;
+      throw new CliError(`Hetzner API request failed (${detail})`);
     }
   };
 
@@ -363,7 +391,8 @@ export function hetznerProvider(deps: ProviderDeps, sleep: Sleep = realSleep): C
       for (const r of ordered) {
         switch (r.kind) {
           case "vm":
-            await deleteResource(`/servers/${r.id}`);
+            // Only wait when the delete actually started one (not on 404).
+            if (await deleteResource(`/servers/${r.id}`)) await waitServerGone(r.id);
             break;
           case "firewall":
             await deleteFirewall(r.id);

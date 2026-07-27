@@ -26,6 +26,13 @@
   re-prompted interactively); fresh installs `chmod 600 .env` (D10). The self-bootstrap block
   downloads the pinned tarball and re-execs when run outside a checkout (`AERIAL_REF` /
   `AERIAL_TARBALL_URL` overridable; recursion-guarded).
+- **Local-mode caddy fix (found in live e2e, 2026-07-26):** `email {$ACME_EMAIL}` with the
+  empty email local mode passes is a Caddyfile parse error (crash loop). The directive keyword now
+  arrives via compose interpolation (`ACME_EMAIL_DIRECTIVE: ${ACME_EMAIL:+email}`) so the line
+  vanishes entirely when no email is set. Known local-mode limitation (unchanged): the layer4
+  streamer-ingest ports (8100–8110) terminate TLS with the site certificate, which a `:80` no-TLS
+  install doesn't have — live ingest on a local station fails the TLS handshake; panel/Auto-DJ
+  paths are unaffected. Revisit if local live-ingest testing becomes a real need.
 - **Security hardening from review:** station dir created 0700 (its `.env` holds all secrets);
   DO firewall now attaches before the boot/cloud-init wait (no open-ingress window); a
   provisioning-stage failure gets the same destroy-partial-resources offer as later failures;

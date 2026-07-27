@@ -4,7 +4,10 @@
 # SITE_ADDRESS=radio.example.com  → automatic Let's Encrypt HTTPS + ingest cert.
 # SITE_ADDRESS=localhost          → Caddy internal CA (local dev; clients skip-verify).
 {
-	email {$ACME_EMAIL}
+	# ACME_EMAIL_DIRECTIVE is "email" when ACME_EMAIL is non-empty, "" otherwise
+	# (compose ${ACME_EMAIL:+email}) — a bare `email` directive with no argument
+	# is a parse error, so the whole line must vanish for no-TLS local installs.
+	{$ACME_EMAIL_DIRECTIVE} {$ACME_EMAIL}
 
 	# ── DJ ingest: terminate TLS for the Icecast source protocol, then proxy the
 	# decrypted stream to the per-channel Liquidsoap harbor on the same port. The

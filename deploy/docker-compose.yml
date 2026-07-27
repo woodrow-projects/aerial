@@ -55,6 +55,8 @@ services:
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
       ACME_EMAIL: ${ACME_EMAIL}
+      # "email" iff ACME_EMAIL is non-empty — see the Caddyfile global block.
+      ACME_EMAIL_DIRECTIVE: ${ACME_EMAIL:+email}
     ports:
       - "80:80"
       - "443:443"

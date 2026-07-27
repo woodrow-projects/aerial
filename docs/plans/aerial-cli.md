@@ -185,6 +185,19 @@ management commands (tokens saved during `up`; removal = delete a file, CLI prin
 `resize`/multi-region/floating IPs (hosted-tier energy); non-interactive `up` flags (interactive
 first; flags when someone actually needs them).
 
+### Backlog (queued behind the full e2e pass)
+
+- **DNS guard: registrar-locked domains (found live, 2026-07-27).** The in-use guard cannot catch
+  domains whose *registrar* forbids external nameservers — Cloudflare Registrar being the big one
+  (`asiatic.black` e2e: delegation chosen, NS change impossible at Cloudflare, user cancelled
+  mid-poll; recovery = `aerial down` + re-`up` with a-record, which worked as designed).
+  Fix in `chooseDnsMode`: the CLI already fetches RDAP for the registrar hint — when the registrar
+  is Cloudflare (and any other known NS-locked registrars), steer to the A-record path up front
+  with a one-line explanation instead of recommending delegation. While in there: when the DNS
+  host is Cloudflare, the A-record instruction should say to use **"DNS only" (grey cloud), not
+  Proxied** — proxied records break the IP poll, ACME issuance, and the ADR D4 streaming-ToS
+  caveat.
+
 ### Fast-follow (v1.1): backup / restore
 
 The SQLite story (ADR D11: "copy one file, resurrect the station anywhere") becomes CLI-real:

@@ -1,15 +1,16 @@
-# CLI release pipeline (docs/plans/aerial-cli.md, M5).
+# Release pipeline (docs/plans/aerial-cli.md, M5).
 #
-# Tag cli-vX.Y.Z -> cross-compile with bun (all four targets from linux — no
-# matrix), attach tarballs + SHA256SUMS to a GitHub Release, render the
-# Homebrew formula and push it to woodrow-projects/homebrew-tap. Zero infra
-# beyond GitHub.
+# One vX.Y.Z tag versions the whole repo in lockstep: the server tarball the
+# CLI installs (codeload of this same tag) AND the CLI binaries. Tag push ->
+# cross-compile with bun (all four targets from linux — no matrix), attach
+# tarballs + SHA256SUMS to the GitHub Release, render the Homebrew formula
+# and push it to woodrow-projects/homebrew-tap. Zero infra beyond GitHub.
 name: release-cli
 
 on:
   push:
     tags:
-      - "cli-v*"
+      - "v*"
 
 permissions:
   contents: write
@@ -20,30 +21,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Release gate: a CLI binary only installs a combination that was tested
-      # together (src/version.ts) — refuse to publish if the pinned aerial ref
-      # is missing or the tag disagrees with CLI_VERSION.
+      # Release gate: the tag must agree with CLI_VERSION — the pinned server
+      # ref is this same tag by construction (lockstep), so there is nothing
+      # else to cross-check.
       - name: Assert version pinning
         run: |
           version_ts=packages/cli/src/version.ts
           cli_version="$(grep '^export const CLI_VERSION' "$version_ts" | sed -E 's/.*"([^"]+)".*/\1/')"
-          pinned_ref="$(grep '^export const PINNED_AERIAL_REF' "$version_ts" | sed -E 's/.*"([^"]+)".*/\1/')"
           [ -n "$cli_version" ] || { echo "::error::Could not read CLI_VERSION from $version_ts"; exit 1; }
-          [ -n "$pinned_ref" ] || { echo "::error::Could not read PINNED_AERIAL_REF from $version_ts"; exit 1; }
 
-          tag_version="${GITHUB_REF_NAME#cli-v}"
+          tag_version="${GITHUB_REF_NAME#v}"
           if [ "$tag_version" != "$cli_version" ]; then
             echo "::error::Tag $GITHUB_REF_NAME (version $tag_version) does not match CLI_VERSION=$cli_version in $version_ts."
             exit 1
           fi
 
-          if ! git ls-remote --exit-code --tags origin "refs/tags/$pinned_ref" >/dev/null; then
-            echo "::error::Pinned aerial ref '$pinned_ref' does not exist on origin. Create and push that release tag first — the CLI installs it (PINNED_AERIAL_REF in $version_ts)."
-            exit 1
-          fi
-
           echo "VERSION=$cli_version" >> "$GITHUB_ENV"
-          echo "PINNED_REF=$pinned_ref" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
@@ -81,8 +74,8 @@ jobs:
             gh release edit "$GITHUB_REF_NAME" --draft=false
           else
             gh release create "$GITHUB_REF_NAME" \
-              --title "aerial CLI $VERSION" \
-              --notes "aerial CLI $VERSION (installs aerial $PINNED_REF)." \
+              --title "aerial $VERSION" \
+              --notes "aerial $VERSION — server release and CLI binaries (lockstep)." \
               assets/aerial-*.tar.gz assets/SHA256SUMS
           fi
 

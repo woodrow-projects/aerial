@@ -4,9 +4,10 @@
 > questions were resolved in the 2026-07-19 grilling session. State model is ADR D16; terminology
 > (station/channel) in `CONTEXT.md`. The CLI lives in `packages/cli` (222 Vitest units, D14
 > test-first; adversarial multi-agent review passed — 8 findings fixed, see git history). Still
-> ahead of the first release: tag `v0.1.0` on the aerial repo (the pinned ref the CLI installs),
-> create the `homebrew-tap` repo + `TAP_PUSH_TOKEN` secret, then tag `cli-v0.1.0`; and the per-
-> provider live e2e (`up` → probe → `down` → assert nothing labeled remains) with real tokens.
+> ahead of the first release: the per-provider live e2e (`up` → probe → `down` → assert nothing
+> labeled remains) with real tokens. Releasing = push ONE tag: `vX.Y.Z` versions the whole repo
+> in lockstep (server tarball + CLI binaries; `cli-v*` retired 2026-07-28 — the two-namespace
+> scheme's manual pin/gate/ordering cost outweighed its theoretical independence).
 
 ## Implementation notes (deltas & out-of-plan work, kept minimal)
 
@@ -118,7 +119,8 @@ Constraint accepted: stick to plain `fetch`/`node:fs`/`node:child_process`, no n
 (Bun single-file executables are least mature there). Binary size (~50–90 MB) is the accepted wart.
 
 **Distribution — zero infra, all GitHub:**
-- Tag `cli-vX.Y.Z` → GitHub Actions cross-compiles, tars, attaches to a **GitHub Release**
+- Tag `vX.Y.Z` (one lockstep tag for the whole repo; PINNED_AERIAL_REF is derived from
+  CLI_VERSION) → GitHub Actions cross-compiles, tars, attaches to a **GitHub Release**
   (GitHub hosts all bytes), computes SHA256s, and pushes an updated formula to the
   **Homebrew tap** repo (`woodrow-projects/homebrew-tap` — the org tap can host future
   projects' formulas too): `brew install woodrow-projects/tap/aerial`.

@@ -9,8 +9,12 @@ export const CLI_VERSION = "0.1.0";
 
 export const AERIAL_REPO = "woodrow-projects/aerial";
 
-/** The aerial repo ref this CLI version installs (created at release time). */
-export const PINNED_AERIAL_REF = "v0.1.0";
+/**
+ * The aerial repo ref this CLI version installs. Lockstep by construction:
+ * one `vX.Y.Z` tag versions the whole repo (server tarball + CLI binaries),
+ * so the pin is derived, never maintained.
+ */
+export const PINNED_AERIAL_REF = `v${CLI_VERSION}`;
 
 /** Tarball of the pinned release (no auth, no git required on the target). */
 export function releaseTarballUrl(ref: string = PINNED_AERIAL_REF): string {

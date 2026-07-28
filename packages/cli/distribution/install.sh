@@ -3,9 +3,8 @@
 # Detects OS/arch, downloads the matching release binary, installs it to
 # /usr/local/bin (or ~/.local/bin when that isn't writable).
 #
-# NOTE: `releases/latest` resolves across ALL repo releases — acceptable while
-# cli-v* are the only binary releases; revisit if the repo ever publishes
-# other release kinds.
+# NOTE: `releases/latest` is always safe here — every v* release carries the
+# CLI binaries (one lockstep tag versions the whole repo).
 set -euo pipefail
 
 REPO="woodrow-projects/aerial"

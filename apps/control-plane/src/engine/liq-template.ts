@@ -29,8 +29,17 @@ export interface LiquidsoapParams {
 }
 
 export function buildLiquidsoapScript(p: LiquidsoapParams): string {
+  // HE-AAC for the low rung only (<=64k) for adaptive mobile (ADR D2); higher
+  // rungs stay AAC-LC. HE-AAC needs libfdk_aac (present in the image's ffmpeg
+  // build); the native `aac` encoder is LC-only and silently ignores aac_he.
   const hlsStreams = p.hlsBitrates
-    .map((b) => `    ("aac_${b}", %ffmpeg(format="mpegts", %audio(codec="aac", b="${b}k")))`)
+    .map((b) => {
+      const enc =
+        b <= 64
+          ? `%ffmpeg(format="mpegts", %audio(codec="libfdk_aac", b="${b}k", profile="aac_he"))`
+          : `%ffmpeg(format="mpegts", %audio(codec="aac", b="${b}k"))`;
+      return `    ("aac_${b}", ${enc})`;
+    })
     .join(",\n");
 
   // Escape double quotes in interpolated strings that could contain them.
@@ -122,8 +131,14 @@ loop = mksafe(playlist("${p.mediaDir}", mode="randomize", reload_mode="watch"))
 # Instant cutover to live the moment a streamer connects (track_sensitive=false).
 radio = fallback(track_sensitive=false, [live, loop])
 
-# Loudness: placeholder normalization. TODO: replace with true EBU R128 (D12).
-radio = normalize(radio)
+# Loudness: EBU R128 / LUFS normalization, ON by default (ADR D12). Applied to
+# the shared source before the output split, so HLS *and* Icecast are normalized.
+# Target -16 LUFS (streaming practice, competitive perceived level) rather than
+# broadcast -23 LUFS; lufs=true measures/targets in LUFS (R128 units), not RMS.
+# (ffmpeg.filter.loudnorm is the truest integrated-R128 operator and is present
+# in the image, but its filter-graph clock cannot be unified with this live
+# fallback + dual-output pipeline — so the native LUFS normalizer is used.)
+radio = normalize(radio, lufs=true, target=-16.0)
 
 # Now-playing side-channel (D8): push metadata to the control plane.
 radio.on_metadata(fun(m) ->

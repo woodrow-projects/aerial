@@ -300,8 +300,9 @@ contract to be stated before the implementation biases it, and guarantees the te
 **Consequence.** First suite stood up in `apps/control-plane`: `liq-template.spec.ts` (config generator,
 100%), `internal-token.guard.spec.ts` (fail-closed auth, 100%), `stream-keys.service.spec.ts` (issuance +
 verification). `vitest` + `@vitest/coverage-v8` are dev dependencies; `turbo run test` already fans the
-`test` script across the workspace. **Backlog:** a CI workflow (`.github/workflows`) that runs `pnpm test`
-on every PR and blocks merge on red — until then, TDD is enforced by discipline and review.
+`test` script across the workspace. The backlogged CI gate shipped 2026-07-28:
+`.github/workflows/ci.yml` runs `pnpm typecheck` + `pnpm test` on every PR and push to main
+(mark the `test` check Required under branch protection to make red actually block merge).
 
 ## D15 — SPA UI built on shadcn/ui (Radix + Tailwind)
 

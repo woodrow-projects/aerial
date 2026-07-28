@@ -1,0 +1,32 @@
+# Test gate (ADR D14): the full workspace unit suite + typecheck on every PR
+# and every push to main. The job name "test" is the status check to mark
+# Required under branch protection so red blocks merge.
+#
+# Unit suites are pure (mocked collaborators — D14); the real-engine compose
+# validation and the per-provider live CLI e2e stay separate/manual.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test

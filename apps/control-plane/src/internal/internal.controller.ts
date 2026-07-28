@@ -12,6 +12,7 @@ import { InternalTokenGuard } from "../common/internal-token.guard";
 import { Public } from "../auth/auth.guard";
 import { StreamKeysService } from "../channels/stream-keys.service";
 import { NowPlayingService } from "../nowplaying/nowplaying.service";
+import { SessionsService } from "../sessions/sessions.service";
 
 /**
  * Hooks called by the Liquidsoap engine over the internal network. Guarded by a
@@ -26,6 +27,7 @@ export class InternalController {
   constructor(
     private readonly streamKeys: StreamKeysService,
     private readonly nowPlaying: NowPlayingService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /** Harbor source auth: 200 => accept the live feed, 401 => drop it. */
@@ -45,7 +47,10 @@ export class InternalController {
 
   @Post("status")
   @HttpCode(204)
-  status(@Body(new ZodValidationPipe(statusHookSchema)) body: StatusHookInput) {
+  async status(@Body(new ZodValidationPipe(statusHookSchema)) body: StatusHookInput) {
     this.nowPlaying.setLive(body.slug, body.live);
+    // Per-stream session log (ADR D10). Best-effort: SessionsService swallows its
+    // own persistence errors, so this await never throws and the hook still 204s.
+    await (body.live ? this.sessions.open(body.slug) : this.sessions.close(body.slug));
   }
 }

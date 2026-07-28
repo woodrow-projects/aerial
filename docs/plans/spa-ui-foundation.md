@@ -1,10 +1,13 @@
 # Plan: SPA UI foundation — shadcn/ui, TanStack Router & Query, app shell
 
-> **Status: planned.** Realizes the SPA stack `docs/ARCHITECTURE.md` already names (shadcn/Radix + Tailwind)
-> but that was never implemented — today the operator panel is plain React + a hand-written 251-line
-> `styles.css`, a single session-gated `Dashboard`, no router, no component library. This plan covers
-> standardizing on shadcn primitives (ADR D15), adding real routing/navigation, and refactoring the existing
-> screens onto that foundation. Covers the "shadcn everywhere" and "sidebar navigation" notes.
+> **Status: implemented (2026-07).** Realizes the SPA stack `docs/ARCHITECTURE.md` names (shadcn/Radix +
+> Tailwind). `apps/web` is now Tailwind v4 + vendored shadcn primitives (`src/components/ui/`), TanStack Router
+> (code-based: `/login` + auth-guarded shell over `/` Channels and `/cdn` Delivery) and TanStack Query
+> (the old `setInterval` polling is gone — channels poll at 5s, CDN at 3s while provisioning). The inline
+> `App.tsx`/`Login.tsx` components and the 251-line `styles.css` are retired; screens live under
+> `src/features/*` and all brand identity is isolated behind `src/brand/` (see
+> [`spa-branding.md`](./spa-branding.md)). A Vitest + Testing Library harness was stood up (D14).
+> The sections below are retained as the original planning record.
 
 ## Why
 

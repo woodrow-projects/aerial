@@ -1,0 +1,57 @@
+/*
+ * BRAND PALETTE — the single source of colour for the whole SPA.
+ *
+ * This is the ONLY file in the app permitted to contain raw colour values.
+ * Everything else consumes these as shadcn/Tailwind theme tokens (bg-background,
+ * text-muted-foreground, …) which alias the custom properties below via the
+ * `@theme inline` block in `src/index.css`. A rebrand edits this file (and the
+ * copy in `brand.ts` / the mark in `Logo.tsx`) and touches nothing else.
+ *
+ * Values are the current dark palette carried over verbatim from the retired
+ * hand-written `styles.css` (see docs/plans/spa-branding.md). The app is
+ * dark-only today; a future light theme adds a second block and a theme toggle.
+ *
+ *   old --bg #0b0e14  -> background          old --accent #5b8cff -> primary / ring
+ *   old --text        -> foreground          old --live   #36d399 -> live (custom)
+ *   old --panel       -> card / popover      old --danger #ff6b6b -> destructive
+ *   old --panel-2     -> secondary / muted / input surface
+ *   old --line        -> border / input border
+ *   old --muted       -> muted-foreground
+ */
+:root {
+  --background: #0b0e14;
+  --foreground: #e6e9ef;
+
+  --card: #141a24;
+  --card-foreground: #e6e9ef;
+
+  --popover: #141a24;
+  --popover-foreground: #e6e9ef;
+
+  --primary: #5b8cff;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1b2330;
+  --secondary-foreground: #e6e9ef;
+
+  --muted: #1b2330;
+  --muted-foreground: #8a93a6;
+
+  --accent: #1b2330;
+  --accent-foreground: #e6e9ef;
+
+  --destructive: #ff6b6b;
+  --destructive-foreground: #ffd5d5;
+
+  --live: #36d399;
+  --live-foreground: #36d399;
+
+  --border: #283142;
+  --input: #283142;
+  --input-surface: #1b2330;
+  --ring: #5b8cff;
+
+  --radius: 0.75rem;
+
+  color-scheme: dark;
+}

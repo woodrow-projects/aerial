@@ -35,7 +35,7 @@ describe("SessionsService.open (streamer connect)", () => {
 
     expect(prisma.channel.findUnique).toHaveBeenCalledWith({ where: { slug: "jazz" } });
     expect(prisma.streamSession.create).toHaveBeenCalledWith({
-      data: { channelId: "c1", mount: "/jazz", sourceIp: null },
+      data: { channelId: "c1", mount: "/jazz", sourceIp: null, streamerId: null },
     });
   });
 
@@ -45,7 +45,7 @@ describe("SessionsService.open (streamer connect)", () => {
     await svc.open("jazz", "203.0.113.7");
 
     expect(prisma.streamSession.create).toHaveBeenCalledWith({
-      data: { channelId: "c1", mount: "/jazz", sourceIp: "203.0.113.7" },
+      data: { channelId: "c1", mount: "/jazz", sourceIp: "203.0.113.7", streamerId: null },
     });
   });
 
@@ -154,5 +154,19 @@ describe("SessionsService.onApplicationBootstrap (crash-recovery sweep)", () => 
     prisma.streamSession.updateMany.mockRejectedValue(new Error("db down"));
 
     await expect(svc.onApplicationBootstrap()).resolves.toBeUndefined();
+  });
+});
+
+describe("SessionsService.open streamer attribution (ADR D18)", () => {
+  it("records the streamer id established by the auth hook", async () => {
+    const prisma = mockPrisma();
+    const svc = new SessionsService(prisma as never);
+    prisma.channel.findUnique.mockResolvedValue({ id: "c1", slug: "jazz", mount: "/jazz" });
+
+    await svc.open("jazz", "203.0.113.7", "user-1");
+
+    expect(prisma.streamSession.create).toHaveBeenCalledWith({
+      data: { channelId: "c1", mount: "/jazz", sourceIp: "203.0.113.7", streamerId: "user-1" },
+    });
   });
 });

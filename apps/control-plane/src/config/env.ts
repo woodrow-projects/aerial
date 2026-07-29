@@ -38,6 +38,18 @@ export const env = {
     configRoot: process.env.LIQUIDSOAP_CONFIG_ROOT ?? "/tmp/aerial-liq",
   },
 
+  // Schedule-aware streamer auth (ADR D18).
+  schedule: {
+    // Minutes of grace around a live show window in which its owner may still connect.
+    graceMin: int(process.env.SCHEDULE_GRACE_MIN, 5),
+  },
+
+  // Auto-DJ media library (ADR D17); files live under engine.mediaRoot.
+  media: {
+    // Max upload size per media file, in megabytes.
+    uploadMaxMb: int(process.env.UPLOAD_MAX_MB, 200),
+  },
+
   auth: {
     // >=32 chars; `openssl rand -base64 32`. Missing => sessions silently break.
     secret: process.env.BETTER_AUTH_SECRET ?? "",

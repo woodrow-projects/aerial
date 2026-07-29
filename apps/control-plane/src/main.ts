@@ -51,6 +51,15 @@ async function bootstrap(): Promise<void> {
     },
   });
 
+  // ── Media uploads (ADR D17) ────────────────────────────────────────────────
+  // Register @fastify/multipart before listen so MediaController (POST /api/media)
+  // can stream file uploads to the media volume. Size cap = env.media.uploadMaxMb
+  // (UPLOAD_MAX_MB); one file per request. Dynamic import keeps this a single block.
+  const { default: multipart } = await import("@fastify/multipart");
+  await fastify.register(multipart, {
+    limits: { fileSize: env.media.uploadMaxMb * 1024 * 1024, files: 1 },
+  });
+
   await app.listen({ port: env.port, host: "0.0.0.0" });
   new Logger("bootstrap").log(`Aerial control-plane listening on :${env.port} (docs: /api/docs)`);
 }

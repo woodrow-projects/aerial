@@ -11,6 +11,13 @@ import { NowPlayingModule } from "./nowplaying/nowplaying.module";
 import { ChannelsModule } from "./channels/channels.module";
 import { CdnModule } from "./cdn/cdn.module";
 import { InternalModule } from "./internal/internal.module";
+import { MediaModule } from "./media/media.module";
+import { PlaylistsModule } from "./playlists/playlists.module";
+import { ClocksModule } from "./clocks/clocks.module";
+import { ShowsModule } from "./shows/shows.module";
+import { AutodjModule } from "./autodj/autodj.module";
+import { StreamerKeysModule } from "./streamer-keys/streamer-keys.module";
+import { UsersModule } from "./users/users.module";
 
 // Serve the built SPA only when present (baked into the image in prod; absent in
 // dev, where Vite serves it on :5173). NOTE: verify the `exclude` patterns work
@@ -34,6 +41,14 @@ const staticImports: DynamicModule[] = existsSync(env.webDist)
     ChannelsModule,
     CdnModule,
     InternalModule,
+    // Auto-DJ & scheduling (ADR D17/D18)
+    MediaModule,
+    PlaylistsModule,
+    ClocksModule,
+    ShowsModule,
+    AutodjModule,
+    StreamerKeysModule,
+    UsersModule,
   ],
   // Global operator-session guard; controllers opt out with @Public().
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],

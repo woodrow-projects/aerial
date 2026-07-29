@@ -115,6 +115,79 @@ describe("buildLiquidsoapScript — loudness normalization (EBU R128, D12)", () 
   });
 });
 
+describe("buildLiquidsoapScript — control-plane-owned Auto-DJ queue (D17)", () => {
+  it("pulls the next track from POST /internal/next-track via request.dynamic, not a watched dir", () => {
+    const script = buildLiquidsoapScript(params({ deliveryMode: "both" }));
+    // The control plane owns selection (D17): request.dynamic asks the hook.
+    expect(script).toContain("request.dynamic(");
+    expect(script).toContain("/internal/next-track");
+    // The request body is exactly {slug}, reusing the internal-token header pattern.
+    expect(script).toContain('data=json.stringify({slug = "jazz"})');
+    expect(script).toContain("x-internal-token");
+  });
+
+  it("plays a 200 + non-empty body as an annotate URI, else nulls (engine falls to silence)", () => {
+    const script = buildLiquidsoapScript(params());
+    expect(script).toContain("resp.status_code == 200 and string.length(resp) > 0");
+    expect(script).toContain("request.create(resp)");
+    expect(script).toContain("null()");
+  });
+
+  it("retires the watched-dir playlist() source entirely", () => {
+    const script = buildLiquidsoapScript(params());
+    // The old fallback loop watched a media dir; selection is now control-plane-owned.
+    expect(script).not.toContain('reload_mode="watch"');
+    expect(script).not.toContain('mode="randomize"');
+    expect(script).not.toContain("playlist(");
+  });
+
+  it("keeps live-first + mksafe + normalize structure with autodj as the floor", () => {
+    const script = buildLiquidsoapScript(params({ deliveryMode: "both" }));
+    // Instant live cutover (track_sensitive=false); Auto-DJ is the floor.
+    expect(script).toContain("fallback(track_sensitive=false, [live, autodj])");
+    // mksafe guarantees the mount never drops (silence if the queue is empty too).
+    expect(script).toContain("mksafe(radio)");
+    // Loudness still applied to the shared source before the outputs.
+    expect(script).toContain("normalize(radio, lufs=true, target=-16.0)");
+  });
+});
+
+describe("buildLiquidsoapScript — crossfade & cue honoring (D12, Liquidsoap 2.2.5)", () => {
+  it("enables level-aware smart crossfade on the Auto-DJ path", () => {
+    const script = buildLiquidsoapScript(params());
+    // crossfade(smart=true) is the 2.2.5 operator; smart_crossfade was removed and
+    // cue_cut is deprecated (cue is honored at request resolution instead).
+    expect(script).toContain("crossfade(smart=true, autodj)");
+  });
+
+  it("does not use the deprecated cue_cut operator (cue is honored at request resolution)", () => {
+    const script = buildLiquidsoapScript(params());
+    expect(script).not.toContain("cue_cut");
+    expect(script).not.toContain("smart_crossfade");
+  });
+});
+
+describe("buildLiquidsoapScript — ingest address forwarding (harbor 2.2.5 exposes it)", () => {
+  it("forwards the harbor client address in the /internal/auth body", () => {
+    const script = buildLiquidsoapScript(params());
+    // In 2.2.5 the harbor auth callback receives {address,user,password}.
+    expect(script).toContain("address = req.address");
+  });
+
+  it("captures the authenticated address and replays it to the /internal/status connect hook", () => {
+    const script = buildLiquidsoapScript(params({ slug: "jazz" }));
+    // on_connect only receives headers in 2.2.5, so the address is captured in auth.
+    expect(script).toContain('last_address = ref("")');
+    expect(script).toContain("last_address := req.address");
+    expect(script).toContain('live = true, address = last_address()');
+  });
+
+  it("sends no address on disconnect (there is no connected client then)", () => {
+    const script = buildLiquidsoapScript(params({ slug: "jazz" }));
+    expect(script).toContain('{slug = "jazz", live = false}');
+  });
+});
+
 describe("buildLiquidsoapScript — HE-AAC low rung (D2)", () => {
   it("emits HE-AAC for the 64k rung and AAC-LC for the 128k rung", () => {
     const script = buildLiquidsoapScript(params({ deliveryMode: "hls", hlsBitrates: [64, 128] }));

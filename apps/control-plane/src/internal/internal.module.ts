@@ -1,11 +1,12 @@
 import { Module } from "@nestjs/common";
-import { ChannelsModule } from "../channels/channels.module";
+import { AutodjModule } from "../autodj/autodj.module";
 import { NowPlayingModule } from "../nowplaying/nowplaying.module";
 import { SessionsModule } from "../sessions/sessions.module";
+import { StreamerKeysModule } from "../streamer-keys/streamer-keys.module";
 import { InternalController } from "./internal.controller";
 
 @Module({
-  imports: [ChannelsModule, NowPlayingModule, SessionsModule],
+  imports: [NowPlayingModule, SessionsModule, StreamerKeysModule, AutodjModule],
   controllers: [InternalController],
 })
 export class InternalModule {}

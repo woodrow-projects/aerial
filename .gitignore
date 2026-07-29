@@ -26,6 +26,8 @@ apps/control-plane/prisma/*.db
 /srv/
 hls/
 media/
+# …but the control-plane media *module* source is code, not runtime data
+!apps/control-plane/src/media/
 *.log
 
 # editor / OS

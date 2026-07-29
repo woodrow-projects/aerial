@@ -1,5 +1,10 @@
+import "reflect-metadata";
+import { ForbiddenException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import type { ExecutionContext } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChannelsController } from "./channels.controller";
+import { RolesGuard } from "../auth/roles";
 import type { ChannelsService } from "./channels.service";
 import type { StreamKeysService } from "./stream-keys.service";
 import type { NowPlayingService } from "../nowplaying/nowplaying.service";
@@ -62,5 +67,39 @@ describe("ChannelsController", () => {
     expect(streamKeys.create).toHaveBeenCalledWith("c1");
     expect(streamKeys.list).toHaveBeenCalledWith("c1");
     expect(streamKeys.revoke).toHaveBeenCalledWith("k9");
+  });
+});
+
+/**
+ * RBAC (ADR D18): channel mutations — including stream-key issuance/revocation — are
+ * admin-only; a streamer's panel is read-only. Proven by running the real RolesGuard
+ * against the real @Roles metadata on each route. Reads stay open to any session.
+ */
+describe("ChannelsController RBAC", () => {
+  const guard = new RolesGuard(new Reflector());
+  const ctxFor = (handler: (...a: never[]) => unknown, role: string): ExecutionContext =>
+    ({
+      getHandler: () => handler,
+      getClass: () => ChannelsController,
+      switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
+    }) as unknown as ExecutionContext;
+
+  const mutations = {
+    create: ChannelsController.prototype.create,
+    update: ChannelsController.prototype.update,
+    remove: ChannelsController.prototype.remove,
+    createKey: ChannelsController.prototype.createKey,
+    revokeKey: ChannelsController.prototype.revokeKey,
+  };
+
+  for (const [name, handler] of Object.entries(mutations)) {
+    it(`denies a streamer (403) and allows an admin on ${name}`, () => {
+      expect(() => guard.canActivate(ctxFor(handler, "streamer"))).toThrow(ForbiddenException);
+      expect(guard.canActivate(ctxFor(handler, "admin"))).toBe(true);
+    });
+  }
+
+  it("leaves reads open to any session (list is not admin-gated)", () => {
+    expect(guard.canActivate(ctxFor(ChannelsController.prototype.list, "streamer"))).toBe(true);
   });
 });

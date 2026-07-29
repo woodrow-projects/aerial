@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap, OnModuleDestroy } from "@nestjs/common";
 import { ChildProcess, spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Channel } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
@@ -24,6 +24,10 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly procs = new Map<string, ChildProcess>(); // channelId -> process
   private readonly stopping = new Set<string>(); // channelIds we intentionally stopped
   private readonly restartCounts = new Map<string, number>(); // consecutive crash count
+  // channelId -> the script text currently written to disk / running. Seeded from
+  // the on-disk .liq on boot so an unchanged syncChannel skips the restart (and
+  // the audio gap it causes) — we only restart when this text actually changes.
+  private readonly scripts = new Map<string, string>();
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -31,7 +35,21 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
     mkdirSync(env.engine.configRoot, { recursive: true });
     const channels = await this.prisma.channel.findMany({ where: { isActive: true } });
     this.logger.log(`Starting ${channels.length} active channel(s)`);
-    for (const channel of channels) this.startChannel(channel);
+    for (const channel of channels) {
+      this.seedScriptFromDisk(channel);
+      this.startChannel(channel);
+    }
+  }
+
+  /** Seed the running-script cache from the existing .liq so boot won't needlessly rewrite/restart. */
+  private seedScriptFromDisk(channel: Channel): void {
+    const configPath = join(env.engine.configRoot, `${channel.slug}.liq`);
+    try {
+      if (existsSync(configPath)) this.scripts.set(channel.id, readFileSync(configPath, "utf8"));
+    } catch (err) {
+      // Unreadable/absent file → leave the cache empty; startChannel will write it.
+      this.logger.warn(`Could not seed script for "${channel.slug}" from disk: ${String(err)}`);
+    }
   }
 
   onModuleDestroy(): void {
@@ -41,12 +59,22 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  /** Start or restart a channel's engine to match its current config. */
+  /**
+   * Reconcile a channel's engine with its current config. Restarts only when the
+   * generated script text changes or on an isActive transition — an unrelated edit
+   * that produces an identical script is a no-op, avoiding the audio gap a
+   * kill+respawn causes. (Live library/queue changes never touch the script at
+   * all: selection is control-plane-owned, D17.)
+   */
   syncChannel(channel: Channel): void {
     if (!channel.isActive) {
-      this.stopChannel(channel.id);
+      this.stopChannel(channel.id); // isActive transition → stop (never restart)
       return;
     }
+    const script = buildLiquidsoapScript(this.buildParams(channel));
+    // Only skip when a process is actually running the identical script; if nothing
+    // is running (inactive→active, crash/backoff) we must (re)start it.
+    if (this.procs.has(channel.id) && this.scripts.get(channel.id) === script) return;
     this.restartChannel(channel);
   }
 
@@ -74,7 +102,13 @@ export class EngineService implements OnApplicationBootstrap, OnModuleDestroy {
     mkdirSync(params.mediaDir, { recursive: true });
 
     const configPath = join(env.engine.configRoot, `${channel.slug}.liq`);
-    writeFileSync(configPath, buildLiquidsoapScript(params));
+    const script = buildLiquidsoapScript(params);
+    // Skip the write when the on-disk script already matches (seeded on boot) — the
+    // cache tracks the running script so syncChannel can detect a real change.
+    if (this.scripts.get(channel.id) !== script) {
+      writeFileSync(configPath, script);
+      this.scripts.set(channel.id, script);
+    }
 
     const spawnedAt = Date.now();
     const proc = spawn(env.engine.liquidsoapBin, [configPath], {

@@ -1,11 +1,17 @@
 import {
   cdnProviderSchema,
   cdnStatusSchema,
+  daysOfWeekSchema,
   deliveryModeSchema,
+  hhmmSchema,
   hlsBitratesSchema,
+  playlistOrderSchema,
+  showTypeSchema,
   type CdnProvider,
   type CdnStatus,
   type DeliveryMode,
+  type PlaylistOrder,
+  type ShowType,
 } from "@aerial/shared";
 
 /**
@@ -47,5 +53,41 @@ export function parseCdnProvider(raw: string): CdnProvider {
 export function parseCdnStatus(raw: string): CdnStatus {
   const parsed = cdnStatusSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid CDN status column value: ${raw}`);
+  return parsed.data;
+}
+
+// ── Auto-DJ TEXT-enum columns (ADR D17) ─────────────────────────────────────────
+
+export function parsePlaylistOrder(raw: string): PlaylistOrder {
+  const parsed = playlistOrderSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid playlist order column value: ${raw}`);
+  return parsed.data;
+}
+
+export function parseShowType(raw: string): ShowType {
+  const parsed = showTypeSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid show type column value: ${raw}`);
+  return parsed.data;
+}
+
+export function serializeDaysOfWeek(days: number[]): string {
+  return JSON.stringify(daysOfWeekSchema.parse(days));
+}
+
+export function parseDaysOfWeek(raw: string): number[] {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error(`invalid daysOfWeek column value: ${raw}`);
+  }
+  const parsed = daysOfWeekSchema.safeParse(value);
+  if (!parsed.success) throw new Error(`invalid daysOfWeek column value: ${raw}`);
+  return parsed.data;
+}
+
+export function parseHhmm(raw: string): string {
+  const parsed = hhmmSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid HH:MM column value: ${raw}`);
   return parsed.data;
 }

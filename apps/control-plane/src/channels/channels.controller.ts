@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import {
   createChannelSchema,
   updateChannelSchema,
@@ -6,11 +6,19 @@ import {
   type UpdateChannelInput,
 } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
+import { Roles, RolesGuard } from "../auth/roles";
 import { NowPlayingService } from "../nowplaying/nowplaying.service";
 import { ChannelsService } from "./channels.service";
 import { StreamKeysService } from "./stream-keys.service";
 
+/**
+ * Channel CRUD + stream-key management. Reads (list/get/nowplaying/listKeys) stay
+ * open to any signed-in operator; all mutations — including stream-key issuance and
+ * revocation — are admin-only (ADR D18: a streamer's panel is read-only), enforced
+ * by RolesGuard reading the @Roles metadata below.
+ */
 @Controller("api/channels")
+@UseGuards(RolesGuard)
 export class ChannelsController {
   constructor(
     private readonly channels: ChannelsService,
@@ -24,6 +32,7 @@ export class ChannelsController {
   }
 
   @Post()
+  @Roles("admin")
   create(@Body(new ZodValidationPipe(createChannelSchema)) body: CreateChannelInput) {
     return this.channels.create(body);
   }
@@ -34,11 +43,13 @@ export class ChannelsController {
   }
 
   @Patch(":id")
+  @Roles("admin")
   update(@Param("id") id: string, @Body(new ZodValidationPipe(updateChannelSchema)) body: UpdateChannelInput) {
     return this.channels.update(id, body);
   }
 
   @Delete(":id")
+  @Roles("admin")
   @HttpCode(204)
   remove(@Param("id") id: string) {
     return this.channels.remove(id);
@@ -52,6 +63,7 @@ export class ChannelsController {
 
   // ── Stream keys ──────────────────────────────────────────────────────────────
   @Post(":id/keys")
+  @Roles("admin")
   @HttpCode(201)
   createKey(@Param("id") id: string) {
     return this.streamKeys.create(id);
@@ -63,6 +75,7 @@ export class ChannelsController {
   }
 
   @Delete(":id/keys/:keyId")
+  @Roles("admin")
   @HttpCode(204)
   revokeKey(@Param("keyId") keyId: string) {
     return this.streamKeys.revoke(keyId);

@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@aerial/shared": "workspace:*",
+    "@fastify/multipart": "^10.1.0",
     "@fastify/static": "^7.0.4",
     "@nestjs/common": "^10.4.4",
     "@nestjs/config": "^3.2.3",

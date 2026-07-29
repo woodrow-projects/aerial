@@ -2,8 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   parseCdnProvider,
   parseCdnStatus,
+  parseDaysOfWeek,
   parseDeliveryMode,
+  parseHhmm,
   parseHlsBitrates,
+  parsePlaylistOrder,
+  parseShowType,
+  serializeDaysOfWeek,
   serializeHlsBitrates,
 } from "./db-columns";
 
@@ -54,5 +59,71 @@ describe("cdn column mappings", () => {
   it("rejects unknown values", () => {
     expect(() => parseCdnProvider("cloudflare")).toThrow(/provider/);
     expect(() => parseCdnStatus("paused")).toThrow(/status/);
+  });
+});
+
+describe("playlistOrder column mapping", () => {
+  it.each(["shuffle", "sequential", "random"] as const)("accepts %s", (order) => {
+    expect(parsePlaylistOrder(order)).toBe(order);
+  });
+
+  it("rejects unknown orders", () => {
+    expect(() => parsePlaylistOrder("weighted")).toThrow(/playlist order/);
+  });
+});
+
+describe("showType column mapping", () => {
+  it.each(["scheduled", "live"] as const)("accepts %s", (type) => {
+    expect(parseShowType(type)).toBe(type);
+  });
+
+  it("rejects unknown types", () => {
+    expect(() => parseShowType("prerecorded")).toThrow(/show type/);
+  });
+});
+
+describe("daysOfWeek column mapping", () => {
+  it("round-trips a day list through the stored string", () => {
+    expect(parseDaysOfWeek(serializeDaysOfWeek([0, 1, 2, 3, 4, 5, 6]))).toEqual([
+      0, 1, 2, 3, 4, 5, 6,
+    ]);
+  });
+
+  it("serializes to compact JSON", () => {
+    expect(serializeDaysOfWeek([1, 3, 5])).toBe("[1,3,5]");
+  });
+
+  it("parses a single-day list", () => {
+    expect(parseDaysOfWeek("[0]")).toEqual([0]);
+  });
+
+  it("rejects malformed JSON with a descriptive error", () => {
+    expect(() => parseDaysOfWeek("not-json")).toThrow(/daysOfWeek/);
+  });
+
+  it("rejects JSON that is not a valid day list", () => {
+    expect(() => parseDaysOfWeek('{"a":1}')).toThrow(/daysOfWeek/);
+    expect(() => parseDaysOfWeek("[]")).toThrow(/daysOfWeek/); // must name at least one day
+    expect(() => parseDaysOfWeek("[7]")).toThrow(/daysOfWeek/); // out of 0-6 range
+    expect(() => parseDaysOfWeek("[-1]")).toThrow(/daysOfWeek/);
+    expect(() => parseDaysOfWeek("[1.5]")).toThrow(/daysOfWeek/);
+    expect(() => parseDaysOfWeek("[1,1]")).toThrow(/daysOfWeek/); // duplicates
+  });
+
+  it("rejects duplicate days on serialize", () => {
+    expect(() => serializeDaysOfWeek([1, 1])).toThrow();
+  });
+});
+
+describe("hhmm column mapping", () => {
+  it.each(["00:00", "09:05", "13:30", "23:59"])("accepts %s", (t) => {
+    expect(parseHhmm(t)).toBe(t);
+  });
+
+  it("rejects malformed clock times", () => {
+    expect(() => parseHhmm("24:00")).toThrow(/HH:MM/);
+    expect(() => parseHhmm("9:00")).toThrow(/HH:MM/);
+    expect(() => parseHhmm("12:60")).toThrow(/HH:MM/);
+    expect(() => parseHhmm("noon")).toThrow(/HH:MM/);
   });
 });

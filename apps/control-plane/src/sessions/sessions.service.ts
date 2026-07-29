@@ -10,7 +10,11 @@ import { PrismaService } from "../prisma/prisma.service";
  * logged, never thrown: the auth/status hooks must keep answering Liquidsoap
  * even if the DB is unavailable (the audio path must not depend on this log).
  *
- * LIMITATION: sourceIp is not currently obtainable. The status hook payload
+ * RESOLVED LIMITATION (2026-07-29): the engine template now forwards the
+ * harbor auth callback's address, and streamer identity arrives via
+ * StreamerAuthService.lastAccepted — both are threaded through open() by the
+ * internal controller. Original note kept for history:
+ * (was) sourceIp is not currently obtainable. The status hook payload
  * carries only {slug, live}; the streamer's ingest address is known to
  * Liquidsoap (harbor `req.address`) but the engine template — owned elsewhere —
  * does not forward it. The `open(sourceIp)` seam is ready for when it does; it
@@ -36,7 +40,11 @@ export class SessionsService implements OnApplicationBootstrap {
   }
 
   /** Streamer connected: open a session, first closing any stale open one for the channel. */
-  async open(slug: string, sourceIp: string | null = null): Promise<void> {
+  async open(
+    slug: string,
+    sourceIp: string | null = null,
+    streamerId: string | null = null,
+  ): Promise<void> {
     try {
       const channel = await this.prisma.channel.findUnique({ where: { slug } });
       if (!channel) {
@@ -49,7 +57,7 @@ export class SessionsService implements OnApplicationBootstrap {
         data: { endedAt: new Date() },
       });
       await this.prisma.streamSession.create({
-        data: { channelId: channel.id, mount: channel.mount, sourceIp },
+        data: { channelId: channel.id, mount: channel.mount, sourceIp, streamerId },
       });
     } catch (err) {
       this.logger.error(`Failed to open session for "${slug}": ${String(err)}`);

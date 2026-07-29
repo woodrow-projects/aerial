@@ -12,9 +12,171 @@ generator client {
 //   Channel.hlsBitrates   JSON int array, e.g. "[64,128]"
 //   CdnConfig.provider    "bunny"                            (ADR D4 — Bunny-first, pluggable)
 //   CdnConfig.status      "disabled" | "provisioning" | "active" | "error"  (SPEC §7.2)
+//   Playlist.order        "shuffle" | "sequential" | "random"                (ADR D17)
+//   Show.type             "scheduled" | "live"                               (ADR D17)
+//   Show.startTime/endTime "HH:MM" 24h wall-clock                            (ADR D17)
+//   Show.daysOfWeek       JSON int array 0-6, 0=Sunday, e.g. "[0,1,2,3,4,5,6]" (ADR D17)
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+// ── Auto-DJ, clockwheels & scheduling (ADR D17/D18) ─────────────────────────────
+// Tracks/Playlists/Clocks live at the install level and are reusable across channels;
+// Shows are per-channel. The control plane owns track selection (ADR D17): Liquidsoap
+// pulls from POST /internal/next-track and just plays what it's told.
+
+/// One media file in the install library. `fileName` is relative to env.mediaRoot.
+/// Cue/fade/loudness fields become the Liquidsoap annotate URI the queue returns.
+
+model Track {
+  id          String   @id @default(uuid())
+  fileName    String   @unique // relative to mediaRoot, e.g. "artist/song.mp3"
+  title       String
+  artist      String?
+  album       String?
+  durationSec Float
+  cueIn       Float    @default(0)
+  cueOut      Float?
+  fadeIn      Float    @default(0)
+  fadeOut     Float    @default(0)
+  amplifyDb   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  playlists PlaylistTrack[]
+}
+
+/// A named pool/category of tracks (e.g. "Currents", "Jingles", "Ads"). `order` is a
+/// TEXT enum (validated by db-columns); dedupWindowMin avoids near-term repeats;
+/// isJingle hides jingles/IDs from now-playing.
+
+model Playlist {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  order          String   @default("shuffle") // shuffle | sequential | random
+  dedupWindowMin Int      @default(60)
+  isJingle       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tracks PlaylistTrack[]
+  slots  ClockSlot[]
+}
+
+/// Join row placing a Track in a Playlist at an ordered position.
+
+model PlaylistTrack {
+  id         String   @id @default(uuid())
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  trackId    String
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  position   Int
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, position])
+}
+
+/// A clockwheel: an ordered, repeating template of slots — the deterministic sequence
+/// a channel plays while this clock is active (the differentiator, plan §Clockwheels).
+
+model Clock {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slots      ClockSlot[]
+  defaultFor Channel[] // channels using this as their defaultClock
+  shows      Show[] // scheduled shows programmed by this clock
+}
+
+/// One step of a Clock: draw `count` tracks from `playlist` (in the playlist's order),
+/// then advance the pointer. playlistId is Restrict — a playlist wired into a clock
+/// cannot be deleted out from under the rotation.
+
+model ClockSlot {
+  id         String   @id @default(uuid())
+  clockId    String
+  clock      Clock    @relation(fields: [clockId], references: [id], onDelete: Cascade)
+  position   Int
+  playlistId String
+  playlist   Playlist @relation(fields: [playlistId], references: [id], onDelete: Restrict)
+  count      Int      @default(1)
+
+  @@unique([clockId, position])
+}
+
+/// A programming block on a channel for a recurring window. Exactly one type (TEXT enum,
+/// validated by db-columns): `scheduled` → an Auto-DJ program (references a Clock);
+/// `live` → only the owning streamer's live source. endTime < startTime wraps overnight.
+
+model Show {
+  id        String  @id @default(uuid())
+  channelId String
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  type      String // scheduled | live
+  title     String
+  clockId   String? // scheduled shows reference their Clock (Restrict: keep the clock alive)
+  clock     Clock?  @relation(fields: [clockId], references: [id], onDelete: Restrict)
+  // Owning User (streamer/admin) of a live show. SCALAR only — no relation: better-auth
+  // owns the User model and regenerates it (`better-auth generate`); a FK here would
+  // entangle that regen. Ownership existence is enforced in the service layer.
+  ownerId    String?
+  startTime  String // "HH:MM" 24h, server-local (per-install TZ)
+  endTime    String // "HH:MM"; end < start wraps past midnight
+  daysOfWeek String    @default("[0,1,2,3,4,5,6]") // JSON int array, 0=Sunday
+  dateStart  DateTime?
+  dateEnd    DateTime?
+  priority   Int       @default(0)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([channelId])
+}
+
+/// Per-user streamer key (ADR D18): a source authenticates live ingest with it. Only
+/// the bcrypt hash is stored (ADR D10). userId is SCALAR/unique (no relation) — same
+/// better-auth ownership rationale as Show.ownerId.
+
+model StreamerKey {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  keyHash   String
+  createdAt DateTime @default(now())
+}
+
+/// Decision log — why a given URI played on a channel ("why this track", plan §Playout).
+/// Only channelId is a real FK; the track/playlist/clock/show refs are deliberately
+/// SCALAR (no FK) so log rows survive later library/clock/show deletions — the audit
+/// trail must outlive the entities it references.
+
+model PlayLog {
+  id           String   @id @default(uuid())
+  channelId    String
+  channel      Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  at           DateTime @default(now())
+  trackId      String?
+  playlistId   String?
+  clockId      String?
+  slotPosition Int?
+  showId       String?
+  reason       String
+  uri          String
+
+  @@index([channelId, at])
+}
+
+/// Per-channel slot pointer into the active clock. `position` is the index of the next
+/// slot to play; reset to 0 when the channel's active clock changes. channelId is the
+/// PK (one pointer per channel).
+
+model ClockState {
+  channelId String   @id
+  clockId   String
+  position  Int      @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 // Operator accounts/sessions are owned by better-auth (User/Session/Account/
@@ -49,11 +211,19 @@ model Channel {
   harborPort     Int      @unique // streamer ingest port (HARBOR_BASE_PORT + index)
   hlsBitrates    String   @default("[64,128]") // JSON int array, kbps, HE-AAC + AAC-LC
   icecastBitrate Int      @default(128) // kbps MP3
+  // Auto-DJ clock that fills unscheduled time so the channel is never silent (ADR D17).
+  defaultClockId String?
+  defaultClock   Clock?   @relation(fields: [defaultClockId], references: [id], onDelete: SetNull)
+  // Enforce schedule-aware streamer auth: a source may go live only during a live show
+  // assigned to it (ADR D18). false = opt-in advisory mode (any active key, anytime).
+  enforceSchedule Boolean @default(true)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   streamKeys StreamKey[]
   sessions   StreamSession[]
+  shows      Show[]
+  playLogs   PlayLog[]
 }
 
 /// Per-channel ingest credentials. Only the bcrypt hash is stored (D10).
@@ -78,6 +248,10 @@ model StreamSession {
   channel   Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
   mount     String
   sourceIp  String?
+  // Owning User (streamer/admin) on air for this session, for "who was on air when"
+  // (ADR D18). SCALAR only — better-auth owns User; joined in the service layer so
+  // better-auth's model regen (`better-auth generate`) is never entangled with ours.
+  streamerId String?
   startedAt DateTime  @default(now())
   endedAt   DateTime?
 

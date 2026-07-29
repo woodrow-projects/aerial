@@ -1,5 +1,10 @@
+import "reflect-metadata";
+import { ForbiddenException } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import type { ExecutionContext } from "@nestjs/common";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CdnController } from "./cdn.controller";
+import { RolesGuard } from "../auth/roles";
 import type { CdnService } from "./cdn.service";
 
 /**
@@ -46,5 +51,38 @@ describe("CdnController", () => {
   it("POST /api/cdn/disable → CdnService.disable()", async () => {
     await controller.disable();
     expect(service.disable).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * RBAC (ADR D18): CDN controls change install-wide delivery (and touch the CDN API
+ * key), so every mutation is admin-only; a streamer's panel is read-only. Proven by
+ * running the real RolesGuard against the real @Roles metadata on each route. The
+ * status read stays open to any authenticated session.
+ */
+describe("CdnController RBAC", () => {
+  const guard = new RolesGuard(new Reflector());
+  const ctxFor = (handler: (...a: never[]) => unknown, role: string): ExecutionContext =>
+    ({
+      getHandler: () => handler,
+      getClass: () => CdnController,
+      switchToHttp: () => ({ getRequest: () => ({ user: { role } }) }),
+    }) as unknown as ExecutionContext;
+
+  const mutations = {
+    setKey: CdnController.prototype.setKey,
+    enable: CdnController.prototype.enable,
+    disable: CdnController.prototype.disable,
+  };
+
+  for (const [name, handler] of Object.entries(mutations)) {
+    it(`denies a streamer (403) and allows an admin on ${name}`, () => {
+      expect(() => guard.canActivate(ctxFor(handler, "streamer"))).toThrow(ForbiddenException);
+      expect(guard.canActivate(ctxFor(handler, "admin"))).toBe(true);
+    });
+  }
+
+  it("leaves the status read open to any session (not admin-gated)", () => {
+    expect(guard.canActivate(ctxFor(CdnController.prototype.status, "streamer"))).toBe(true);
   });
 });

@@ -20,7 +20,7 @@ export interface LiquidsoapParams {
   hlsBitrates: number[]; // kbps, e.g. [64, 128]
   icecastBitrate: number; // kbps MP3
   hlsDir: string; // absolute output dir for this channel's HLS
-  mediaDir: string; // fallback media dir (empty => silence via mksafe)
+  mediaDir: string; // channel media dir the engine ensures exists; track selection is control-plane-owned (D17), so the script no longer reads it directly
   icecastHost: string;
   icecastPort: number;
   icecastSourcePassword: string;
@@ -103,13 +103,21 @@ def notify(path, payload) =
   ))
 end
 
-# Harbor source auth → delegates to the control plane (bcrypt compare, D10).
-# Liquidsoap 2.2 passes a record {user, password, address}.
+# Most-recent successfully-authenticated client address. Verified against
+# Liquidsoap 2.2.5: the harbor auth callback receives {address,user,password}
+# (address = client network address), but on_connect receives only the header
+# list — no address. So we capture the address in auth and replay it to the
+# status hook for the per-stream session log (ADR D10 source IP).
+last_address = ref("")
+
+# Harbor source auth → delegates to the control plane (bcrypt compare, D10;
+# schedule-aware in D18). Liquidsoap 2.2.5 passes a record {address,user,password}.
 def auth(req) =
+  last_address := req.address
   resp = http.post(
     "#{internal_url}/internal/auth",
     headers=[("Content-Type", "application/json"), ("x-internal-token", internal_token)],
-    data=json.stringify({mount = "${p.mount}", user = req.user, password = req.password})
+    data=json.stringify({mount = "${p.mount}", user = req.user, password = req.password, address = req.address})
   )
   resp.status_code == 200
 end
@@ -121,15 +129,45 @@ live = input.harbor(
   auth=auth,
   buffer=5.0,
   max=15.0,
-  on_connect=fun(_) -> notify("/internal/status", {slug = "${p.slug}", live = true}),
+  on_connect=fun(_) -> notify("/internal/status", {slug = "${p.slug}", live = true, address = last_address()}),
   on_disconnect=fun() -> notify("/internal/status", {slug = "${p.slug}", live = false})
 )
 
-# Fallback loop. mksafe guarantees the mount never drops (silence if empty).
-loop = mksafe(playlist("${p.mediaDir}", mode="randomize", reload_mode="watch"))
+# Auto-DJ: the control plane owns track selection (ADR D17). Each time the queue
+# needs a track it asks POST /internal/next-track (same internal URL + token
+# header as the other hooks). A 200 with a non-empty body is an annotate: URI to
+# play; anything else means "nothing playable" → null → the fallback below drops
+# to silence via mksafe. Replaces the old watched media directory source.
+def next_track() =
+  resp = http.post(
+    "#{internal_url}/internal/next-track",
+    headers=[("Content-Type", "application/json"), ("x-internal-token", internal_token)],
+    data=json.stringify({slug = "${p.slug}"})
+  )
+  if resp.status_code == 200 and string.length(resp) > 0 then
+    request.create(resp)
+  else
+    null()
+  end
+end
+autodj = request.dynamic(id="autodj", next_track)
 
-# Instant cutover to live the moment a streamer connects (track_sensitive=false).
-radio = fallback(track_sensitive=false, [live, loop])
+# Gapless, cue-aware transitions (ADR D12), validated against Liquidsoap 2.2.5:
+#   - cue_in/cue_out are honored at request resolution (request.create defaults
+#     cue_in_metadata="liq_cue_in", cue_out_metadata="liq_cue_out"); the
+#     standalone cue-cutting operator is deprecated in 2.2.5, so it is not used.
+#   - crossfade(smart=true) does level-aware, gapless track-to-track fades and
+#     honors the per-track liq_cross_duration override; the old dedicated
+#     smart-crossfade plugin is absent in 2.2.5, so smart=true replaces it.
+# Applied to the Auto-DJ source only: the live harbor keeps its instant,
+# track_sensitive=false cutover below (no crossfade latency on go-live).
+autodj = crossfade(smart=true, autodj)
+
+# Instant cutover to live the moment a streamer connects (track_sensitive=false);
+# Auto-DJ is the floor.
+radio = fallback(track_sensitive=false, [live, autodj])
+# mksafe guarantees the mount never drops (silence if the queue is empty too).
+radio = mksafe(radio)
 
 # Loudness: EBU R128 / LUFS normalization, ON by default (ADR D12). Applied to
 # the shared source before the output split, so HLS *and* Icecast are normalized.

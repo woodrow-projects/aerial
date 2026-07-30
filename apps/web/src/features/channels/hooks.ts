@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateChannelInput, DeliveryMode } from "@aerial/shared";
 import { api } from "@/api";
+import { autoDjApi } from "./api";
 
 /**
  * Server-state hooks for channels + stream keys — the TanStack Query layer that
@@ -84,4 +85,58 @@ export function useRevokeKey(channelId: string) {
     mutationFn: (keyId: string) => api.revokeKey(channelId, keyId),
     onSuccess: () => qc.invalidateQueries({ queryKey: keysKey(channelId) }),
   });
+}
+
+// ── Auto-DJ & scheduling (Phase E) ───────────────────────────────────────────────
+
+export const clocksKey = ["clocks"] as const;
+export const playlogKey = (channelId: string, limit?: number) =>
+  ["channels", channelId, "playlog", limit ?? "all"] as const;
+
+/** Clockwheels for the channel default-clock picker (shared across channel cards). */
+export function useClocks() {
+  return useQuery({ queryKey: clocksKey, queryFn: autoDjApi.listClocks });
+}
+
+/** Set/clear the Auto-DJ default clock (ADR D17); the channels list re-renders. */
+export function useSetDefaultClock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, defaultClockId }: { id: string; defaultClockId: string | null }) =>
+      autoDjApi.setDefaultClock(id, defaultClockId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: channelsKey }),
+  });
+}
+
+/** Toggle schedule-aware streamer auth (ADR D18); the channels list re-renders. */
+export function useSetEnforceSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enforceSchedule }: { id: string; enforceSchedule: boolean }) =>
+      autoDjApi.setEnforceSchedule(id, enforceSchedule),
+    onSuccess: () => qc.invalidateQueries({ queryKey: channelsKey }),
+  });
+}
+
+/**
+ * The "why this track" playlog is read on demand (when the disclosure opens) and
+ * refreshed manually — never polled. `refetchInterval: false` is explicit so the
+ * decision log stays a stable snapshot the operator can read; the Refresh button
+ * calls `refetch()`.
+ */
+export function playlogQueryOptions(
+  channelId: string,
+  opts?: { enabled?: boolean; limit?: number },
+) {
+  return {
+    queryKey: playlogKey(channelId, opts?.limit),
+    queryFn: () => autoDjApi.getPlaylog(channelId, opts?.limit),
+    enabled: opts?.enabled ?? true,
+    refetchInterval: false as const,
+    refetchOnWindowFocus: false,
+  };
+}
+
+export function usePlaylog(channelId: string, opts?: { enabled?: boolean; limit?: number }) {
+  return useQuery(playlogQueryOptions(channelId, opts));
 }

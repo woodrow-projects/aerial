@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Endpoint } from "@/components/endpoint";
 import { ErrorNote } from "@/components/error-note";
+import { AutoDjControls } from "./AutoDjControls";
 import {
   useCreateKey,
   useDeleteChannel,
@@ -181,6 +182,10 @@ export function ChannelCard({ channel }: { channel: ChannelDto }) {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+
+        <Separator className="my-4" />
+
+        <AutoDjControls channel={channel} />
 
         {error && <ErrorNote className="mt-3">{error.message}</ErrorNote>}
       </CardContent>

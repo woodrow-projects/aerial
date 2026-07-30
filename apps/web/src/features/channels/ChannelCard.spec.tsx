@@ -16,10 +16,23 @@ vi.mock("@/api", () => ({
   },
 }));
 
+// ChannelCard now embeds AutoDjControls, whose hooks read the local Auto-DJ api;
+// stub it so this card renders without real fetches (clocks resolve to empty).
+vi.mock("./api", () => ({
+  autoDjApi: {
+    listClocks: vi.fn(),
+    setDefaultClock: vi.fn(),
+    setEnforceSchedule: vi.fn(),
+    getPlaylog: vi.fn(),
+  },
+}));
+
 import { api } from "@/api";
+import { autoDjApi } from "./api";
 import { ChannelCard } from "./ChannelCard";
 
 const mockApi = vi.mocked(api);
+const mockAutoDj = vi.mocked(autoDjApi);
 
 const channel: ChannelDto = {
   id: "c1",
@@ -61,6 +74,7 @@ function renderCard() {
 beforeEach(() => {
   vi.clearAllMocks();
   mockApi.listKeys.mockResolvedValue([]);
+  mockAutoDj.listClocks.mockResolvedValue([]);
 });
 
 describe("ChannelCard stream keys", () => {
@@ -102,5 +116,14 @@ describe("ChannelCard stream keys", () => {
     await userEvent.click(await screen.findByRole("button", { name: /revoke/i }));
 
     await waitFor(() => expect(mockApi.revokeKey).toHaveBeenCalledWith("c1", "k-existing"));
+  });
+});
+
+describe("ChannelCard Auto-DJ wiring", () => {
+  it("embeds the default-clock picker, the enforce toggle, and the playout log", () => {
+    renderCard();
+    expect(screen.getByRole("combobox", { name: /default clock/i })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /enforce schedule/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /playout log/i })).toBeInTheDocument();
   });
 });

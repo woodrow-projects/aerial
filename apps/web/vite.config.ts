@@ -25,7 +25,18 @@ export default defineConfig({
       "/internal": target,
     },
   },
+  // Dev-mode counterpart of build.commonjsOptions below: workspace-linked
+  // packages are not prebundled by default, so the browser would import the
+  // raw CJS file and find no named exports.
+  optimizeDeps: {
+    include: ["@aerial/shared"],
+  },
   build: {
     outDir: "dist",
+    commonjsOptions: {
+      // @aerial/shared is CJS and, as a workspace symlink, resolves OUTSIDE
+      // node_modules — include it explicitly or rollup sees zero exports.
+      include: [/node_modules/, /packages\/shared/],
+    },
   },
 });

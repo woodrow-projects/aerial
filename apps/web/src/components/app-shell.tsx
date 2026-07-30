@@ -1,6 +1,6 @@
 import type { ComponentType } from "react";
 import { Link, Outlet } from "@tanstack/react-router";
-import { Cloud, LogOut, Radio } from "lucide-react";
+import { Cloud, LogOut, Radio, Music, ListMusic, CalendarDays, Users } from "lucide-react";
 import { Logo, TAGLINE } from "@/brand";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,10 @@ type NavEntry = { to: string; label: string; icon: ComponentType<{ className?: s
 
 const NAV: NavEntry[] = [
   { to: "/", label: "Channels", icon: Radio, exact: true },
+  { to: "/media", label: "Media", icon: Music },
+  { to: "/programming", label: "Programming", icon: ListMusic },
+  { to: "/schedule", label: "Schedule", icon: CalendarDays },
+  { to: "/users", label: "Users", icon: Users },
   { to: "/cdn", label: "Delivery", icon: Cloud },
 ];
 

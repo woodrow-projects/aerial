@@ -26,6 +26,8 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D14 | Test-Driven Development is mandatory (Vitest; test-first) | Accepted |
 | D15 | SPA UI built on shadcn/ui (Radix + Tailwind), TanStack Router/Query | Accepted |
 | D16 | CLI station state: local config + provider labels; no hosted state service | Accepted |
+| D17 | Control-plane-owned deterministic Auto-DJ queue via request.dynamic | Accepted |
+| D18 | Schedule-aware, enforced-by-default streamer auth; multi-user roles | Accepted |
 
 ---
 
@@ -360,3 +362,50 @@ imperative CLIs.
   exactly the surface the CLI exists to hide.
 - *Terraform/OpenTofu under the hood:* brings the state-file problem back plus a runtime dependency;
   overkill for an imperative create/list/destroy lifecycle.
+
+---
+
+## D17 — Control-plane-owned deterministic Auto-DJ queue
+
+**Context.** Auto-DJ playout (docs/plans/auto-dj-and-scheduling.md) needs track selection that is
+deterministic, inspectable ("why did this track play?"), and editable without audio gaps. The
+alternatives were Liquidsoap-side playlists (the prior watched-directory `playlist()` source) or
+AzuraCast-style engine-managed rotation.
+
+**Decision.** **The control plane owns track selection; Liquidsoap just plays what it's told.** The
+per-channel script's Auto-DJ source is `request.dynamic` pulling `POST /internal/next-track`, which
+resolves the active Show → Clock (or the channel's `defaultClock`), advances a persisted per-channel
+slot pointer (`ClockState`) over the expanded slot sequence, picks from the slot's playlist honoring
+its order (sequential / shuffle-with-dedup-window / random, seeded RNG), returns an `annotate:` URI
+carrying cue/fade metadata, and writes a `PlayLog` decision row — the operator-visible "why".
+Never-silent: a `live` show with no connected streamer and unscheduled time both fall to
+`defaultClock`; no clock → the engine's `mksafe` silence. Library/clock/schedule edits are DB
+changes picked up on the next pull — the engine supervisor restarts a channel only when its
+generated script text actually changes.
+
+**Rejected.** *Watched-directory playlists* (no structure, no dedup, no attribution);
+*engine-owned rotation* (opaque, per-engine state, contradicts the inspectability goal);
+*raw-`.liq` escape hatches* (the AzuraCast footgun the plan explicitly avoids).
+
+---
+
+## D18 — Schedule-aware, enforced-by-default streamer auth + roles
+
+**Context.** ADR D10 introduced per-channel stream keys with no notion of *who* streams; the plan
+requires enforced streamer scheduling (AzuraCast's is advisory) and a read-only `streamer` role.
+
+**Decision.** A broadcaster is a **User** (`admin` | `streamer`) holding a server-generated,
+bcrypt-hashed **per-user streamer key**. Harbor auth (`/internal/auth`) identifies the user by key
+and — when `Channel.enforceSchedule` (default **true**) — admits them only during a `live` Show they
+own, within a configurable grace window (`SCHEDULE_GRACE_MIN`, default 5). Admins are not exempt:
+enforcement is purely schedule-driven, so behavior is predictable for every operator. Accepted
+connections record identity + source address server-side, attributed to the `StreamSession`
+(D10 logging: mount/time/source IP/streamer). RBAC: every mutating API route is admin-only via
+`RolesGuard` (a reflection spec pins that role metadata is never shipped unguarded); streamers get
+read-only panel access. Legacy per-channel StreamKeys keep working as an **advisory fallback**
+(back-compat: they authenticate anytime, with no user identity) — deliberately weaker, documented,
+and destined for deprecation once per-user keys are universal.
+
+**Rejected.** *Advisory-by-default* (the AzuraCast weakness the plan targets); *a standalone
+Streamer entity* (a User with a role covers it — better-auth stays the single account system);
+*role-exempting admins from schedule enforcement* (surprising on-air behavior beats convenience).

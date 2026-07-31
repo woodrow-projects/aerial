@@ -1,6 +1,15 @@
 # Plan: Auto-DJ, Clockwheels & Scheduling
 
-> **Status: planned.** Concrete scope for Aerial's Auto-DJ — designed to clear AzuraCast parity *and*
+> **Status: implemented (2026-07-30) — phases A–E shipped.** Built per this plan (ADRs **D17**/**D18**,
+> renumbered from the candidates below since D16 went to the CLI). Locked decisions: live show with an
+> absent streamer falls through to Auto-DJ (never-silent); media on the local volume; per-install TZ.
+> Adversarially reviewed (7 lenses, 3-judge refutation): 6 findings fixed incl. an RBAC-wiring bypass
+> now pinned by a reflection spec. Known deltas: per-track `amplifyDb` is stored but not yet applied at
+> playout (conflicts with R128 `normalize`; the media UI says so honestly); legacy per-channel stream
+> keys remain an advisory fallback pending deprecation. Remaining validation: real-audio end-to-end
+> playout against the engine (upload → clock → hear it), per D14's integration layer. Original plan:
+>
+> ~~**Status: planned.**~~ Concrete scope for Aerial's Auto-DJ — designed to clear AzuraCast parity *and*
 > leapfrog it on its biggest gaps (no clockwheel, fuzzy rotation, advisory streamer scheduling). The **admin UI is
 > deliberately last**; the data model + API come first so the engine is usable (and scriptable/testable)
 > before any UI exists. Builds on: per-channel Liquidsoap (D6), the `/internal/*` hook pattern, operator auth

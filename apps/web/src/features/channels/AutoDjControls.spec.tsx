@@ -13,7 +13,7 @@ vi.mock("./api", () => ({
   },
 }));
 
-import { autoDjApi, type AutoDjChannel } from "./api";
+import { autoDjApi } from "./api";
 import { AutoDjControls } from "./AutoDjControls";
 
 const mockApi = vi.mocked(autoDjApi);
@@ -31,11 +31,11 @@ const base = {
   slug: "main",
 } as unknown as ChannelDto;
 
-function makeChannel(over: Partial<AutoDjChannel> = {}): AutoDjChannel {
+function makeChannel(over: Partial<ChannelDto> = {}): ChannelDto {
   return { ...base, defaultClockId: "k1", enforceSchedule: true, ...over };
 }
 
-function renderControls(channel: AutoDjChannel = makeChannel()) {
+function renderControls(channel: ChannelDto = makeChannel()) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     user: userEvent.setup({ pointerEventsCheck: 0 }),

@@ -113,13 +113,17 @@ last_address = ref("")
 # Harbor source auth → delegates to the control plane (bcrypt compare, D10;
 # schedule-aware in D18). Liquidsoap 2.2.5 passes a record {address,user,password}.
 def auth(req) =
-  last_address := req.address
   resp = http.post(
     "#{internal_url}/internal/auth",
     headers=[("Content-Type", "application/json"), ("x-internal-token", internal_token)],
     data=json.stringify({mount = "${p.mount}", user = req.user, password = req.password, address = req.address})
   )
-  resp.status_code == 200
+  ok = resp.status_code == 200
+  # Record the address only for ACCEPTED sources — an unconditional write let any
+  # concurrent auth attempt (even a bad-password scan) clobber the ref between a
+  # real streamer's auth and its on_connect (review finding; D10 log integrity).
+  if ok then last_address := req.address end
+  ok
 end
 
 # Live streamer input. on_connect/on_disconnect report "live" status to the control plane.

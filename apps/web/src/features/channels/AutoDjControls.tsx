@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { ErrorNote } from "@/components/error-note";
 import { cn } from "@/lib/utils";
-import type { AutoDjChannel } from "./api";
+import type { ChannelDto } from "@aerial/shared";
 import { useClocks, useSetDefaultClock, useSetEnforceSchedule } from "./hooks";
 import { NONE_CLOCK, clockSelectPayload, clockSelectValue } from "./lib";
 import { PlayoutLogDialog } from "./PlayoutLogDialog";
@@ -21,7 +21,7 @@ import { PlayoutLogDialog } from "./PlayoutLogDialog";
  * are gated server-side (403 for streamers); the controls stay visible and surface
  * the error rather than hiding.
  */
-export function AutoDjControls({ channel }: { channel: AutoDjChannel }) {
+export function AutoDjControls({ channel }: { channel: ChannelDto }) {
   const clocks = useClocks();
   const setDefaultClock = useSetDefaultClock();
   const setEnforce = useSetEnforceSchedule();

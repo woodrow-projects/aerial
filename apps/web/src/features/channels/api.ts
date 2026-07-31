@@ -24,15 +24,7 @@ export interface ClockSummary {
 
 /**
  * A channel plus the two Auto-DJ fields. They live on the backend Channel row and
- * updateChannelSchema, but the shared ChannelDto does not yet surface them — typed
- * here as optional so the controls read current state the moment the API exposes it,
- * defaulting gracefully (null clock / enforce-on) until then.
- */
-export interface AutoDjChannel extends ChannelDto {
-  defaultClockId?: string | null;
-  enforceSchedule?: boolean;
-}
-
+ * updateChannelSchema and surfaced on ChannelDto.
 /** One "why this track played" decision (PlayLogDto), newest-first from the backend. */
 export interface PlayLogEntry {
   id: string;
@@ -67,11 +59,11 @@ export const autoDjApi = {
 
   /** Set (or clear, with null) the Auto-DJ clock that fills unscheduled time (ADR D17). */
   setDefaultClock: (id: string, defaultClockId: string | null) =>
-    fetch(`${BASE}/channels/${id}`, PATCH_JSON({ defaultClockId })).then(json<AutoDjChannel>),
+    fetch(`${BASE}/channels/${id}`, PATCH_JSON({ defaultClockId })).then(json<ChannelDto>),
 
   /** Toggle schedule-aware streamer auth (ADR D18). */
   setEnforceSchedule: (id: string, enforceSchedule: boolean) =>
-    fetch(`${BASE}/channels/${id}`, PATCH_JSON({ enforceSchedule })).then(json<AutoDjChannel>),
+    fetch(`${BASE}/channels/${id}`, PATCH_JSON({ enforceSchedule })).then(json<ChannelDto>),
 
   /** Newest-first playout decisions for the "why this track" view. */
   getPlaylog: (channelId: string, limit?: number) =>

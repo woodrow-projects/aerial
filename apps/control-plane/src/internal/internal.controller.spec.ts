@@ -115,3 +115,15 @@ describe("InternalController.nextTrack (Auto-DJ pull, ADR D17)", () => {
     expect(reply.status).toHaveBeenCalledWith(204);
   });
 });
+
+describe("status connect — address source of truth (review finding)", () => {
+  it("prefers the server-side accepted address over the template-replayed one", async () => {
+    const { streamerAuth, sessions, controller } = deps();
+    streamerAuth.lastAccepted.mockReturnValue({ userId: "u1", address: "198.51.100.1" });
+
+    // The engine's shared ref got clobbered by a concurrent auth attempt:
+    await controller.status({ slug: "jazz", live: true, address: "203.0.113.66" });
+
+    expect(sessions.open).toHaveBeenCalledWith("jazz", "198.51.100.1", "u1");
+  });
+});

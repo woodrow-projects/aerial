@@ -73,3 +73,12 @@ describe("ChannelsService.update — Auto-DJ fields (D17/D18)", () => {
     expect(data.enforceSchedule).toBeUndefined();
   });
 });
+
+describe("ChannelsService DTO — Auto-DJ fields surfaced (review finding)", () => {
+  it("returns defaultClockId and enforceSchedule so the UI can display state", async () => {
+    const { svc } = build();
+    const dto = await svc.update("c1", {});
+    expect(dto.defaultClockId).toBe("clk-1");
+    expect(dto.enforceSchedule).toBe(true);
+  });
+});

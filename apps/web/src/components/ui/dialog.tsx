@@ -109,7 +109,29 @@ const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
     React.useEffect(() => {
       if (!open) return;
       const onKey = (e: KeyboardEvent) => {
-        if (e.key === "Escape") setOpen(false);
+        if (e.key === "Escape") {
+          setOpen(false);
+          return;
+        }
+        // Focus trap: aria-modal promises containment, so Tab must cycle inside
+        // the panel — without this, focus escaped onto occluded app-shell
+        // controls behind the overlay (review finding).
+        if (e.key === "Tab" && panelRef.current) {
+          const focusables = panelRef.current.querySelectorAll<HTMLElement>(
+            'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+          );
+          if (focusables.length === 0) return;
+          const first = focusables[0]!;
+          const last = focusables[focusables.length - 1]!;
+          const active = document.activeElement;
+          if (!e.shiftKey && (active === last || !panelRef.current.contains(active))) {
+            e.preventDefault();
+            first.focus();
+          } else if (e.shiftKey && (active === first || !panelRef.current.contains(active))) {
+            e.preventDefault();
+            last.focus();
+          }
+        }
       };
       document.addEventListener("keydown", onKey);
       const prevOverflow = document.body.style.overflow;

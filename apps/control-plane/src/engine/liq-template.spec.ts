@@ -216,3 +216,12 @@ describe("buildLiquidsoapScript — HE-AAC low rung (D2)", () => {
     expect(script).toContain('("aac_96", %ffmpeg(format="mpegts", %audio(codec="aac", b="96k")))');
   });
 });
+
+describe("harbor auth address capture (review finding: shared-ref race)", () => {
+  it("records last_address only for accepted sources, after the auth decision", () => {
+    const script = buildLiquidsoapScript(params());
+    expect(script).toContain("if ok then last_address := req.address end");
+    // The unconditional pre-auth write must be gone.
+    expect(script).not.toMatch(/def auth\(req\) =\n\s*last_address :=/);
+  });
+});

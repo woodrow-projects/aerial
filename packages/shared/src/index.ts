@@ -78,6 +78,10 @@ export interface ChannelDto {
   harborPort: number;
   endpoints: ChannelEndpoints;
   live: boolean; // is a streamer currently connected (vs fallback loop)?
+  /** Auto-DJ that fills unscheduled time (ADR D17); null = silence fallback. */
+  defaultClockId: string | null;
+  /** D18: live ingest allowed only during the owner's scheduled live shows. */
+  enforceSchedule: boolean;
   createdAt: string;
   updatedAt: string;
 }

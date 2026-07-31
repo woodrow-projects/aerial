@@ -78,9 +78,17 @@ export class InternalController {
     // Per-stream session log (ADR D10). Best-effort: SessionsService swallows its
     // own persistence errors, so this await never throws and the hook still 204s.
     if (body.live) {
-      // Streamer identity was established seconds ago by the auth hook (mount = "/<slug>").
+      // Streamer identity was established seconds ago by the auth hook (mount =
+      // "/<slug>"). Prefer the server-side accepted address over the template's
+      // replayed one — the engine's shared ref can be clobbered by concurrent
+      // auth attempts (review finding); legacy-key sessions (no accepted entry)
+      // still use the replayed address.
       const accepted = this.streamerAuth.lastAccepted(`/${body.slug}`);
-      await this.sessions.open(body.slug, body.address ?? null, accepted?.userId ?? null);
+      await this.sessions.open(
+        body.slug,
+        accepted?.address ?? body.address ?? null,
+        accepted?.userId ?? null,
+      );
     } else {
       await this.sessions.close(body.slug);
     }

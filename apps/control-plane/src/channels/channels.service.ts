@@ -101,6 +101,8 @@ export class ChannelsService {
       harborPort: channel.harborPort,
       endpoints: this.endpoints(channel),
       live: this.nowPlaying.isLive(channel.slug),
+      defaultClockId: channel.defaultClockId,
+      enforceSchedule: channel.enforceSchedule,
       createdAt: channel.createdAt.toISOString(),
       updatedAt: channel.updatedAt.toISOString(),
     };

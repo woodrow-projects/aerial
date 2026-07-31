@@ -146,7 +146,7 @@ export const PLAYOUT_FIELDS = [
   {
     key: "amplifyDb",
     label: "Amplify (dB)",
-    help: "Gain trim applied on playout to even out loudness (may be negative).",
+    help: "Stored per track, not yet applied at playout — loudness is governed by R128 normalization today (may be negative).",
   },
 ] as const satisfies ReadonlyArray<{
   key: keyof TrackMetaForm;

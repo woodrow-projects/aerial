@@ -64,6 +64,10 @@ export class ChannelsService {
         deliveryMode: input.deliveryMode ?? undefined,
         hlsBitrates: input.hlsBitrates ? serializeHlsBitrates(input.hlsBitrates) : undefined,
         icecastBitrate: input.icecastBitrate ?? undefined,
+        // Tri-state: null clears the default clock, undefined leaves it alone —
+        // `?? undefined` would silently eat the clear (review finding).
+        defaultClockId: input.defaultClockId === undefined ? undefined : input.defaultClockId,
+        enforceSchedule: input.enforceSchedule ?? undefined,
       },
     });
     this.engine.syncChannel(channel);

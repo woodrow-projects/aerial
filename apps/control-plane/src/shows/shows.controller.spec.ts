@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // @Roles is owned by the auth agent; mock it so this unit never depends on the
 // file existing on disk (it is metadata-only anyway) — mirrors clocks.controller.spec.
-vi.mock("../auth/roles", () => ({ Roles: () => () => undefined }));
+vi.mock("../auth/roles", () => ({ Roles: () => () => undefined, RolesGuard: class {} }));
 
 import { ShowsController } from "./shows.controller";
 import type { ShowsService } from "./shows.service";

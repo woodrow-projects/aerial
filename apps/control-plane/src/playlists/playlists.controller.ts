@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, UseGuards } from "@nestjs/common";
 import {
   createPlaylistSchema,
   updatePlaylistSchema,
@@ -6,7 +6,7 @@ import {
   type UpdatePlaylistInput,
 } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { Roles } from "../auth/roles";
+import { Roles, RolesGuard } from "../auth/roles";
 import { PlaylistsService } from "./playlists.service";
 import { setPlaylistTracksSchema, type SetPlaylistTracksInput } from "./playlists.schema";
 
@@ -16,6 +16,9 @@ import { setPlaylistTracksSchema, type SetPlaylistTracksInput } from "./playlist
  * schemas through ZodValidationPipe (single source of truth in @aerial/shared).
  */
 @Controller("api/playlists")
+// RBAC (D18): RolesGuard reads the @Roles metadata below — without it the
+// decorators are inert (review finding: streamers could mutate).
+@UseGuards(RolesGuard)
 export class PlaylistsController {
   constructor(private readonly playlists: PlaylistsService) {}
 

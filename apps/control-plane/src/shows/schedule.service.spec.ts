@@ -1,7 +1,7 @@
 import { NotFoundException } from "@nestjs/common";
 import type { Show } from "@prisma/client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ScheduleService } from "./schedule.service";
+import { rangeDayKey, ScheduleService } from "./schedule.service";
 
 /**
  * ScheduleService — the pinned resolution contract (plan §Scheduling & resolution,
@@ -359,5 +359,15 @@ describe("ScheduleService.nowNext — now summary + next transition within 24h",
     // From just after today's window, the only remaining boundary this week is > 24h away.
     const out2 = await svc.nowNext("ch1", new Date(2026, 6, 20, 14, 30));
     expect(out2.next).toBeNull();
+  });
+});
+
+describe("date-range bounds — UTC-midnight instants (review finding)", () => {
+  // The UI sends "YYYY-MM-DD"; z.coerce.date() yields UTC midnight. The range
+  // gate must read the UTC calendar date of that instant — local getters shift
+  // the window a day early on any server west of UTC.
+  it("rangeDayKey reads the UTC calendar date, TZ-independently", () => {
+    expect(rangeDayKey(new Date("2026-08-01T00:00:00.000Z"))).toBe(20260801);
+    expect(rangeDayKey(new Date("2026-12-31T00:00:00.000Z"))).toBe(20261231);
   });
 });

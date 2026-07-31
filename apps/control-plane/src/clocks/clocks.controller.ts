@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { createClockSchema, type CreateClockInput } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { Roles } from "../auth/roles";
+import { Roles, RolesGuard } from "../auth/roles";
 import { ClocksService } from "./clocks.service";
 import { updateClockSchema, type UpdateClockInput } from "./clocks.schema";
 
@@ -12,6 +12,9 @@ import { updateClockSchema, type UpdateClockInput } from "./clocks.schema";
  * validation lives in the shared/local zod schemas + the service.
  */
 @Controller("api/clocks")
+// RBAC (D18): RolesGuard reads the @Roles metadata below — without it the
+// decorators are inert (review finding: streamers could mutate).
+@UseGuards(RolesGuard)
 export class ClocksController {
   constructor(private readonly clocks: ClocksService) {}
 

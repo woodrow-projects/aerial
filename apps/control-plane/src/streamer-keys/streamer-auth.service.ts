@@ -77,8 +77,12 @@ export class StreamerAuthService {
     }
 
     // No per-user key matched — fall back to the legacy per-channel key (advisory,
-    // no user identity). Nothing is recorded: there is no streamer to attribute.
-    if (await this.legacyStreamKeys.verify(mount, password)) return { ok: true, userId: undefined };
+    // no user identity). Clear any prior per-user attribution for the mount so a
+    // stale entry is never pinned on this anonymous session (review finding).
+    if (await this.legacyStreamKeys.verify(mount, password)) {
+      this.accepted.delete(mount);
+      return { ok: true, userId: undefined };
+    }
     return { ok: false };
   }
 

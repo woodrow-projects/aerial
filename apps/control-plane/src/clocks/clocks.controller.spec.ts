@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The @Roles decorator is owned by the auth agent; mock it so this unit test
 // never depends on that file existing on disk (it is metadata-only anyway).
-vi.mock("../auth/roles", () => ({ Roles: () => () => undefined }));
+vi.mock("../auth/roles", () => ({ Roles: () => () => undefined, RolesGuard: class {} }));
 
 import { ClocksController } from "./clocks.controller";
 import type { ClocksService } from "./clocks.service";

@@ -8,12 +8,11 @@ import {
   Param,
   Patch,
   Post,
-  Req,
-} from "@nestjs/common";
+  Req, UseGuards } from "@nestjs/common";
 import type { Readable } from "node:stream";
 import { createTrackMetaSchema, type CreateTrackMetaInput } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { Roles } from "../auth/roles";
+import { Roles, RolesGuard } from "../auth/roles";
 import { MediaService } from "./media.service";
 
 /**
@@ -31,6 +30,9 @@ interface MultipartRequest {
  * registered in main.ts with the size cap from env.media.uploadMaxMb.
  */
 @Controller("api/media")
+// RBAC (D18): RolesGuard reads the @Roles metadata below — without it the
+// decorators are inert (review finding: streamers could mutate).
+@UseGuards(RolesGuard)
 export class MediaController {
   constructor(private readonly media: MediaService) {}
 

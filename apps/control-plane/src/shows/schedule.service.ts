@@ -66,6 +66,16 @@ function dayKey(d: Date): number {
 }
 
 /**
+ * Calendar-day key for a DATE-RANGE BOUND. The UI submits date-only strings
+ * ("YYYY-MM-DD") which z.coerce.date() stores as UTC midnight — the intended
+ * calendar day is therefore the instant's UTC date. Local getters here would
+ * shift the window a day early on any server west of UTC (review finding).
+ */
+export function rangeDayKey(d: Date): number {
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+
+/**
  * Schedule resolution over the Show table (plan §Scheduling & resolution), in
  * server-local time (per-install TZ). Every airing is anchored to its START day:
  * an overnight show (endTime <= startTime) that began YESTERDAY is what is on air
@@ -169,8 +179,8 @@ export class ScheduleService {
     const s = hm(show.startTime);
     const e = hm(show.endTime);
     const overnight = e.h * 60 + e.m <= s.h * 60 + s.m;
-    const dsKey = show.dateStart ? dayKey(show.dateStart) : null;
-    const deKey = show.dateEnd ? dayKey(show.dateEnd) : null;
+    const dsKey = show.dateStart ? rangeDayKey(show.dateStart) : null;
+    const deKey = show.dateEnd ? rangeDayKey(show.dateEnd) : null;
 
     const out: Occurrence[] = [];
     for (let off = -backDays; off <= fwdDays; off++) {

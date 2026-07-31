@@ -5,7 +5,7 @@ import { createTrackMetaSchema } from "@aerial/shared";
 
 // @Roles is owned by the auth agent; mock it so this unit never depends on that file
 // existing on disk (it is metadata-only anyway).
-vi.mock("../auth/roles", () => ({ Roles: () => () => undefined }));
+vi.mock("../auth/roles", () => ({ Roles: () => () => undefined, RolesGuard: class {} }));
 
 import { MediaController } from "./media.controller";
 import type { MediaService } from "./media.service";

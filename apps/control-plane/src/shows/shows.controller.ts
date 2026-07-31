@@ -1,7 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { createShowSchema, type CreateShowInput } from "@aerial/shared";
 import { ZodValidationPipe } from "../common/zod-validation.pipe";
-import { Roles } from "../auth/roles";
+import { Roles, RolesGuard } from "../auth/roles";
 import { ShowsService } from "./shows.service";
 import { ScheduleService } from "./schedule.service";
 import {
@@ -19,6 +19,9 @@ import {
  * date-range, and clock/owner reference checks.
  */
 @Controller("api/channels/:channelId")
+// RBAC (D18): RolesGuard reads the @Roles metadata below — without it the
+// decorators are inert (review finding: streamers could mutate).
+@UseGuards(RolesGuard)
 export class ShowsController {
   constructor(
     private readonly shows: ShowsService,

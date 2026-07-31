@@ -184,3 +184,22 @@ describe("StreamerAuthService.lastAccepted — in-memory TTL map", () => {
     expect(service.lastAccepted("/jazz")).toEqual({ userId: "u1" });
   });
 });
+
+describe("StreamerAuthService — lastAccepted staleness (review finding)", () => {
+  it("a legacy-key success clears any prior per-user attribution for the mount", async () => {
+    const { prisma, schedule, legacy, service } = build();
+    prisma.channel.findUnique.mockResolvedValue({ id: "c1", mount: "/main", isActive: true, enforceSchedule: false });
+    prisma.streamerKey.findMany.mockResolvedValue([{ userId: "u1", keyHash: userKeyHash }]);
+
+    // Per-user key connects: attribution recorded.
+    await service.verify("/main", PLAINTEXT, "203.0.113.9");
+    expect(service.lastAccepted("/main")?.userId).toBe("u1");
+
+    // Later, a legacy channel-key stream on the same mount: no user identity —
+    // the stale entry must NOT be attributed to the previous streamer.
+    prisma.streamerKey.findMany.mockResolvedValue([]);
+    legacy.verify.mockResolvedValue(true);
+    await service.verify("/main", "channel-key-plaintext");
+    expect(service.lastAccepted("/main")).toBeNull();
+  });
+});

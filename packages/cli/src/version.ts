@@ -5,7 +5,7 @@
  * given CLI binary only ever installs a combination that was tested together.
  * The release workflow asserts the pinned tag exists before publishing.
  */
-export const CLI_VERSION = "0.1.0";
+export const CLI_VERSION = "0.1.1";
 
 export const AERIAL_REPO = "woodrow-projects/aerial";
 

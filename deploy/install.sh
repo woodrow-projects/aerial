@@ -176,7 +176,7 @@ if (( ! HAVE_REPO_TREE )); then
 	command -v curl >/dev/null 2>&1 || die "curl is required to download the Aerial release."
 	command -v tar >/dev/null 2>&1 || die "tar is required to unpack the Aerial release."
 	# Default must match PINNED_AERIAL_REF in packages/cli/src/version.ts.
-	AERIAL_REF="${AERIAL_REF:-v0.1.0}"
+	AERIAL_REF="${AERIAL_REF:-v0.1.1}"
 	# Override exists for tests/mirrors.
 	AERIAL_TARBALL_URL="${AERIAL_TARBALL_URL:-https://codeload.github.com/woodrow-projects/aerial/tar.gz/${AERIAL_REF}}"
 	if [[ "$EUID" -eq 0 ]]; then

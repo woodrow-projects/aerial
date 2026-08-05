@@ -5,6 +5,7 @@
  * call process.exit.
  */
 import { downCommand } from "./commands/down";
+import { commandHelp, isCommandName, usage } from "./commands/help";
 import { logsCommand } from "./commands/logs";
 import { lsCommand } from "./commands/ls";
 import { sshCommand } from "./commands/ssh";
@@ -15,23 +16,6 @@ import { defaultPaths } from "./paths";
 import { clackPrompter } from "./prompts";
 import { nodeShell } from "./shell";
 import { CLI_VERSION } from "./version";
-
-export function usage(): string {
-  return [
-    `aerial ${CLI_VERSION} — self-hosted online radio, one command`,
-    "",
-    "Usage:",
-    "  aerial up                 Create a station (local machine or cloud VM)",
-    "  aerial ls                 List stations across providers + this machine",
-    "  aerial down <domain>      Destroy a station (typed confirmation)",
-    "  aerial ssh <domain>       Open a shell on the station VM",
-    "  aerial logs <domain>      Tail the station's service logs",
-    "  aerial upgrade <domain>   Upgrade a station to this CLI's pinned release",
-    "",
-    "  aerial --version | -v     Print version",
-    "  aerial --help   | -h      This help",
-  ].join("\n");
-}
 
 /** stderr message + usage, exit 2 (bad invocation, distinct from runtime failure). */
 function usageError(message: string): never {
@@ -55,6 +39,23 @@ async function main(): Promise<void> {
   }
   if (cmd === "-v" || cmd === "--version") {
     console.log(CLI_VERSION);
+    process.exit(0);
+  }
+  if (cmd === "help") {
+    const topic = rest[0];
+    // `help`, `-h`, `--help` as topics are still help requests, not errors.
+    if (topic === undefined || topic === "help" || topic === "-h" || topic === "--help") {
+      console.log(usage());
+      process.exit(0);
+    }
+    if (isCommandName(topic)) {
+      console.log(commandHelp(topic));
+      process.exit(0);
+    }
+    usageError(`aerial help: '${topic}' isn't an aerial command`);
+  }
+  if (isCommandName(cmd) && rest.some((arg) => arg === "-h" || arg === "--help")) {
+    console.log(commandHelp(cmd));
     process.exit(0);
   }
 

@@ -1,7 +1,14 @@
 <!-- Aerial Icecast config template. Rendered at container start by entrypoint.sh
      (envsubst). Mounts are created dynamically by Liquidsoap on connect, so no
-     per-channel <mount> blocks are needed. Admin/source are locked down; this
-     service is never published publicly (reached only via Caddy). -->
+     per-channel <mount> blocks are needed.
+
+     The container is never published; Caddy is the only way in. Note that
+     <fileserve>1</fileserve> plus the <alias source="/"> below DO serve
+     status.xsl / status-json.xsl with no authentication, and /admin/* behind
+     Basic auth only — per-mount listener counts and now-playing metadata. The
+     boundary that keeps those private is the allow-list in deploy/caddy/Caddyfile,
+     which proxies only /icecast/<slug> mount paths. Don't widen that matcher, and
+     don't publish this service directly. -->
 <icecast>
     <location>Earth</location>
     <admin>${ICECAST_ADMIN_USER}@localhost</admin>

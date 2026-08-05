@@ -103,8 +103,26 @@
 	}
 
 	# ── Icecast low-latency / legacy mounts ────────────────────────────────────
-	handle_path /icecast/* {
+	# ALLOW-LIST, not a passthrough. Only per-channel mount paths reach Icecast —
+	# one kebab-case segment, matching the endpoint the control plane advertises
+	# (`${origin}/icecast/<slug>`, channels.service.ts) and `slugSchema` in
+	# packages/shared. Everything else under /icecast/* is Icecast's own web root
+	# and admin surface — status.xsl, status-json.xsl and /admin/stats.xml serve
+	# per-mount listener counts and now-playing metadata with NO authentication,
+	# and `<fileserve>1</fileserve>` + the `<alias source="/">` in
+	# engine/icecast/icecast.xml.template make them reachable. Forwarding the whole
+	# URL space published all of it on every install.
+	# Pinned by apps/control-plane/src/channels/caddy-icecast-matcher.spec.ts —
+	# keep the pattern and slugSchema in step.
+	@icecast_mount path_regexp ^/icecast/[a-z0-9]+(-[a-z0-9]+)*$
+	handle @icecast_mount {
+		uri strip_prefix /icecast
 		reverse_proxy icecast:8000
+	}
+
+	# Icecast's status pages, admin actions and web root: never public.
+	handle /icecast/* {
+		respond 404
 	}
 
 	# ── Control-plane API + SPA ────────────────────────────────────────────────

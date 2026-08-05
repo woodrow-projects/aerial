@@ -4,13 +4,25 @@
 
 name: aerial
 
+# Cap container logs. The default json-file driver is UNBOUNDED: Liquidsoap runs
+# at log.level 3 piped into the control plane's logger, and Icecast tails its
+# access + error logs to stdout, so an unrotated stack fills a small VM's disk and
+# takes the station off air. 10 MB × 3 files per service.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   icecast:
     # Hosts all channel mountpoints for low-latency/legacy/directory listening.
-    # Locked down: never published directly — only reachable via Caddy (ADR D2).
+    # Never published directly; Caddy allow-lists the per-channel mount paths and
+    # refuses the status/admin surface (ADR D2, and see deploy/caddy/Caddyfile).
     build:
       context: ../engine/icecast
     restart: unless-stopped
+    logging: *default-logging
     environment:
       ICECAST_SOURCE_PASSWORD: ${ICECAST_SOURCE_PASSWORD}
       ICECAST_ADMIN_PASSWORD: ${ICECAST_ADMIN_PASSWORD}
@@ -26,6 +38,7 @@ services:
       context: ..
       dockerfile: apps/control-plane/Dockerfile
     restart: unless-stopped
+    logging: *default-logging
     env_file:
       - ../.env
     environment:
@@ -52,6 +65,7 @@ services:
     build:
       context: ./caddy
     restart: unless-stopped
+    logging: *default-logging
     environment:
       SITE_ADDRESS: ${SITE_ADDRESS}
       ACME_EMAIL: ${ACME_EMAIL}

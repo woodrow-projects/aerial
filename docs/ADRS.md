@@ -28,6 +28,7 @@ cannot be CDN-cached, but **segmented HLS can**. That single property dictates t
 | D16 | CLI station state: local config + provider labels; no hosted state service | Accepted |
 | D17 | Control-plane-owned deterministic Auto-DJ queue via request.dynamic | Accepted |
 | D18 | Schedule-aware, enforced-by-default streamer auth; multi-user roles | Accepted |
+| D19 | Observability: OTel instrumentation, export-only; no bundled backend; in-UI dashboard deferred | Accepted |
 
 ---
 
@@ -409,3 +410,90 @@ and destined for deprecation once per-user keys are universal.
 **Rejected.** *Advisory-by-default* (the AzuraCast weakness the plan targets); *a standalone
 Streamer entity* (a User with a role covers it — better-auth stays the single account system);
 *role-exempting admins from schedule enforcement* (surprising on-air behavior beats convenience).
+
+---
+
+## D19 — Observability: OTel instrumentation, export-only; no bundled backend; in-UI dashboard deferred
+
+**Context.** The stack has no instrumentation of any kind: no `/metrics`, no health endpoint, no
+structured logging (7 unstructured `@nestjs/common` Logger instances writing to stdout), no scheduler
+(`@nestjs/schedule` is not a dependency), and no Nest interceptors/filters/middleware at all. Meanwhile
+`README.md`, `docs/ARCHITECTURE.md` and `SPEC.md` §5/§7 already *advertise* a cost-transparency and
+listener-analytics dashboard that has **zero lines of code**. A 2026-08 design pass asked the obvious
+question: adopt OpenTelemetry, add a Prometheus container, and build an operator-facing telemetry
+dashboard into the panel?
+
+**Decision.**
+
+1. **Adopt OpenTelemetry as the instrumentation layer**, and do it independently of any dashboard work.
+   Instrument the control plane once, in vendor-neutral vocabulary.
+2. **Bundle no observability backend.** No Prometheus, Grafana, Loki, Tempo, or collector container.
+   OTLP export is **off unless the operator sets an endpoint** — one env var, zero containers. A default
+   install stays at three containers.
+3. **Traces are instrumented but are not a product surface** — exported if an endpoint is configured,
+   never stored locally, never rendered in the SPA.
+4. **Logs get structure and rotation, not a viewer.** Structured output plus a Compose `logging:` cap;
+   raw log lines remain a `docker compose logs` / OTLP concern.
+5. **The in-UI observability dashboard is deferred** (see below), not rejected.
+6. **When it is built, audience and health stay separate.** Audience analytics is a durable *product*
+   feature (the SPEC §7.3 wedge) and belongs in SQLite; system health is disposable *ops* data. One UI
+   surface may present both, but they never share a store.
+
+**Rationale.** The target box is small and chosen by price: both provisioning adapters floor at 2 GB RAM
+and pick the cheapest qualifying instance (`packages/cli/src/providers/hetzner.ts`,
+`digitalocean.ts`), and every Liquidsoap encoder already runs *inside* the control-plane container, so
+headroom shrinks with channel count. A Prometheus + Grafana + Loki + Tempo + collector stack is five
+containers and roughly 850 MB — on a box where [D1](#d1--orchestration-docker-compose-not-kubernetes)
+rejected Kubernetes partly over a "~0.5–1 GB control-plane RAM tax", and where
+[D11](#d11--data--storage) dropped Postgres because container failure modes were "the installer's worst
+support surface". That stack is also, almost exactly, the monitoring topology already discarded with the
+AWS/SST design (`docs/legacy/ORIGINAL_DIAGRAM-aws-sst.md`). Export-only inverts the cost/benefit: an
+operator who already runs an observability backend gets everything for one env var, and the operator who
+does not — the persona in SPEC §2 — pays nothing and has nothing new to recover at 2am.
+
+Traces specifically: Aerial is one process with four cross-boundary calls, all Liquidsoap →
+control-plane (`/internal/{auth,status,metadata,next-track}`). Distributed tracing earns its keep across
+process boundaries, and there effectively are none — so a trace UI would be the most expensive and least
+used thing in the plan. They are instrumented rather than skipped because [D5](#d5--control-plane-nestjs-fastify-adapter--reactvitets-spa-one-container-for-v1)
+reserves extracting the engine supervisor into its own process, at which point they stop being pointless.
+
+**Why the dashboard is deferred** (recorded so the analysis is not re-derived):
+
+- **The CDN inversion.** [D2](#d2--delivery-hls-first--cdn-with-a-parallel-origin-direct-icecast-mount)'s
+  entire thesis is that origin egress stays ~constant whether serving 100 or 100k listeners. Origin-side
+  listener counting therefore does not merely degrade at scale — it **inverts**, going blind at the exact
+  moment the audience becomes worth measuring. Any credible design must read usage back from the CDN.
+- **Three paths, three fidelities.** Icecast gives exact concurrency for free; HLS-at-origin gives an
+  inference and currently has *no substrate at all* (`deploy/caddy/Caddyfile` has no `log` directive and
+  there is no log volume); the CDN gives a lagging, aggregate, provider-shaped number. "Listener count" is
+  not one number, and presenting it as one would mislead operators about a figure they budget against.
+- **No client to instrument.** [D9](#d9--public-surface-endpoints--metadata-api-only-no-listen-page-in-v1)
+  ships no player, so a client beacon can be offered but never relied on. (The `@Public()` seam reserved
+  for it in `auth.guard.ts` stays reserved and unbuilt.)
+- **It contradicts a load-bearing sentence in D11.** SQLite-only is justified there on the grounds that
+  "listener traffic never touches the DB". A sampler writing rows on an interval invalidates that, and
+  needs an amendment rather than a silent contradiction.
+- **No scheduler exists.** Every time-driven behaviour today is *pulled* by Liquidsoap; a poller is a new
+  architectural primitive.
+
+Each is answerable — the likely shape is a single canonical unit (listener-seconds) that every path can
+report, with measured and estimated figures visibly distinguished — but together they make this a real
+design project rather than the fast-follow the docs imply.
+
+**Rejected.**
+- *A bundled Prometheus/Grafana stack:* five containers, ~850 MB, its own passwords/ports/volumes/upgrade
+  path and 2am failure mode, on a 2 GB box — for a feature the operator did not ask to self-host.
+- *Prometheus as the store for audience analytics:* wrong retention (an operator will ask about last
+  October), wrong provenance for a billing-adjacent number, and it makes the wedge differentiator vanish
+  whenever the optional container is not running.
+- *A trace viewer in the SPA*, and *a raw log viewer in the SPA:* both expensive, neither actionable for
+  the target persona.
+- *Doing nothing until the dashboard is designed:* instrumentation is useful on its own and is the input
+  the dashboard will need anyway.
+
+**Consequence.** `README.md`, `docs/ARCHITECTURE.md` and `SPEC.md` §5/§7 currently assert analytics that
+do not exist, and the CLI warns operators they will lose "listener history" that was never stored — these
+overstate the product and should be reconciled. Two unrelated defects surfaced during this design pass and
+are tracked separately: Icecast's stats endpoints are reachable unauthenticated through the Caddy
+`/icecast/*` catch-all, and no Compose service sets a `logging:` cap, leaving container logs unrotated on a
+small disk.

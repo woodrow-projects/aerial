@@ -27,3 +27,9 @@ An operator role: someone who broadcasts live into a channel via source software
 
 The automated-playout feature (media library + scheduled playlists feeding a channel when no
 streamer is live). The only surviving use of "DJ".
+
+## Listener
+
+Someone consuming a [Channel](#channel)'s audio output. Has no account and is never an
+[Operator](#operator) — the two never overlap.
+*Avoid:* "user" (that means an operator account), "audience member".

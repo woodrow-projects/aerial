@@ -115,6 +115,17 @@ player is deferred.)
 - **Interactive first-run setup** ✅ *shipped* — `./deploy/install.sh` creates the first **admin** in one
   interactive run; sign-up self-locks afterwards (replaces the manual `seed:operator` + `AUTH_DISABLE_SIGNUP`
   dance). See [`docs/plans/interactive-setup.md`](./docs/plans/interactive-setup.md).
+- **OpenTelemetry instrumentation (export-only)** — instrument the control plane in vendor-neutral OTel
+  vocabulary; structured logs + a Compose log-rotation cap; OTLP export **off unless the operator sets an
+  endpoint**, so a default install gains zero containers. Traces are emitted but are not a product
+  surface. Worth doing on its own merits, independently of any dashboard (ADR D19).
+- **In-panel observability dashboard** — *potential future feature, deliberately deferred.* Operator-facing
+  system health (and, separately, the §7.3 audience/cost wedge) rendered in the panel without requiring the
+  operator to run their own observability backend. Deferred because listener counting is a genuine design
+  project, not a fast-follow: the CDN inversion (ADR D2 means origin-side counting goes blind exactly when
+  the audience grows), three delivery paths with three incompatible fidelities, no client to instrument
+  (D9), and a direct conflict with D11's "listener traffic never touches the DB". Analysis recorded in
+  [ADR D19](./docs/ADRS.md#d19--observability-otel-instrumentation-export-only-no-bundled-backend-in-ui-dashboard-deferred).
 - **User & role management + schedule-aware streamer auth** — Users hold a **role** (`admin` | `streamer`);
   shows are owned by users; a streamer goes live with a per-user streamer key validated against their assigned
   **live** show — see [`docs/plans/auto-dj-and-scheduling.md`](./docs/plans/auto-dj-and-scheduling.md).

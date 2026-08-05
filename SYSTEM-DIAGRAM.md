@@ -149,6 +149,10 @@ on `main` today (per SPEC §3 non-goals and `docs/ADRS.md`):
   — *planned*; today is a single operator, channel-scoped stream keys, and no scheduler — see
   [`docs/plans/auto-dj-and-scheduling.md`](./docs/plans/auto-dj-and-scheduling.md). (Still single-install, not
   multi-tenant.)
+- **Any observability/monitoring component** — no OTel SDK, no `/metrics`, no health endpoint, no
+  Prometheus/Grafana/collector container, and no listener or usage metrics anywhere in the schema. OTel
+  instrumentation is *planned* (export-only, zero added containers); the in-panel dashboard is
+  *deliberately deferred* — see [ADR D19](./docs/ADRS.md#d19--observability-otel-instrumentation-export-only-no-bundled-backend-in-ui-dashboard-deferred).
 - **Automated Icecast relay nodes (multi-VM)** — *planned* (Scale + harden); the relay path is configured
   (`relay-password` set) but unautomated and single-VM today — see
   [`docs/plans/icecast-relay-provisioning.md`](./docs/plans/icecast-relay-provisioning.md). Distinct from the
